@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { User, AuthTokens } from '../types';
+import { setAuthToken, registerUnauthorizedHandler } from '../services/api/client';
 
 interface AuthState {
   user: User | null;
@@ -20,16 +21,25 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   isLoading: false,
 
-  setUser: (user, tokens) =>
-    set({ user, tokens, isAuthenticated: true }),
+  setUser: (user, tokens) => {
+    setAuthToken(tokens.accessToken);
+    set({ user, tokens, isAuthenticated: true });
+  },
 
   updateUser: (partial) =>
     set((state) => ({
       user: state.user ? { ...state.user, ...partial } : null,
     })),
 
-  logout: () =>
-    set({ user: null, tokens: null, isAuthenticated: false }),
+  logout: () => {
+    setAuthToken(null);
+    set({ user: null, tokens: null, isAuthenticated: false });
+  },
 
   setLoading: (isLoading) => set({ isLoading }),
 }));
+
+// Register 401 handler so the API client can trigger logout without a circular import
+registerUnauthorizedHandler(() => {
+  useAuthStore.getState().logout();
+});

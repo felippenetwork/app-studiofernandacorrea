@@ -1,26 +1,22 @@
 import { Router } from 'express';
+import { authController } from './auth.controller';
+import { validate } from '../../middleware/validate.middleware';
+import { authMiddleware } from '../../middleware/auth.middleware';
+import { registerSchema, loginSchema, refreshSchema } from './auth.validator';
 
 export const authRouter = Router();
 
 // POST /api/auth/register
-authRouter.post('/register', (_req, res) => {
-  // TODO ETAPA 2: implement registration
-  res.status(501).json({ message: 'Not implemented yet' });
-});
+authRouter.post('/register', validate(registerSchema), authController.register);
 
 // POST /api/auth/login
-authRouter.post('/login', (_req, res) => {
-  // TODO ETAPA 2: implement login with JWT
-  res.status(501).json({ message: 'Not implemented yet' });
-});
+authRouter.post('/login', validate(loginSchema), authController.login);
 
 // POST /api/auth/refresh
-authRouter.post('/refresh', (_req, res) => {
-  // TODO ETAPA 2: implement token refresh
-  res.status(501).json({ message: 'Not implemented yet' });
-});
+authRouter.post('/refresh', validate(refreshSchema), authController.refresh);
 
 // POST /api/auth/logout
-authRouter.post('/logout', (_req, res) => {
-  res.json({ message: 'Logged out' });
-});
+authRouter.post('/logout', authMiddleware, authController.logout);
+
+// GET /api/auth/me
+authRouter.get('/me', authMiddleware, authController.me);

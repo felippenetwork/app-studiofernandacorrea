@@ -1,9 +1,6 @@
-import { apiClient } from './client';
+import { apiClient, USE_MOCK } from './client';
 import { AuthTokens, LoginCredentials, RegisterData, User } from '../../types';
 import { MOCK_USER } from '../../mocks/data';
-
-// Toggle: false = use real API, true = use mocks
-const USE_MOCK = true;
 
 export const authService = {
   async login(credentials: LoginCredentials): Promise<{ user: User; tokens: AuthTokens }> {
@@ -15,7 +12,7 @@ export const authService = {
       };
     }
     const { data } = await apiClient.post('/auth/login', credentials);
-    return data;
+    return data.data;
   },
 
   async register(registerData: RegisterData): Promise<{ user: User; tokens: AuthTokens }> {
@@ -27,17 +24,29 @@ export const authService = {
       };
     }
     const { data } = await apiClient.post('/auth/register', registerData);
-    return data;
+    return data.data;
   },
 
   async refreshToken(refreshToken: string): Promise<AuthTokens> {
     const { data } = await apiClient.post('/auth/refresh', { refreshToken });
-    return data;
+    return data.data;
   },
 
   async logout(): Promise<void> {
     if (!USE_MOCK) {
-      await apiClient.post('/auth/logout');
+      try {
+        await apiClient.post('/auth/logout');
+      } catch {
+        // Ignore logout errors — clear local state regardless
+      }
     }
+  },
+
+  async getMe(): Promise<User> {
+    if (USE_MOCK) {
+      return MOCK_USER;
+    }
+    const { data } = await apiClient.get('/users/me');
+    return data.data;
   },
 };
