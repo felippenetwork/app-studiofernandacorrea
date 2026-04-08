@@ -1,5 +1,5 @@
-import React, { useCallback } from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect } from 'react';
+import { View, StyleSheet, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -20,11 +20,23 @@ import {
   JosefinSans_700Bold,
 } from '@expo-google-fonts/josefin-sans';
 import * as SplashScreen from 'expo-splash-screen';
+import * as ExpoNotifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { colors } from './src/theme';
+import { useAuthStore } from './src/store/authStore';
+import { pushNotificationsService } from './src/services/api/notifications';
 
 SplashScreen.preventAutoHideAsync();
+
+// Configure how notifications appear when the app is in the foreground
+ExpoNotifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,6 +46,22 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Inner component so it can access auth store hooks
+function AppInner() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  // Register push token when user logs in; deregister on logout
+  useEffect(() => {
+    if (isAuthenticated && Platform.OS !== 'web') {
+      pushNotificationsService.registerPushToken().catch(() => {
+        // Non-fatal — user can still use the app without push notifications
+      });
+    }
+  }, [isAuthenticated]);
+
+  return <AppNavigator />;
+}
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({
@@ -66,7 +94,7 @@ export default function App() {
           <NavigationContainer>
             <View style={styles.root} onLayout={onLayoutRootView}>
               <StatusBar style="dark" backgroundColor={colors.background} />
-              <AppNavigator />
+              <AppInner />
             </View>
           </NavigationContainer>
         </QueryClientProvider>

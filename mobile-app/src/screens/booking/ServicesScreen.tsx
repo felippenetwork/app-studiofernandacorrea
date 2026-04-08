@@ -6,14 +6,16 @@ import {
   FlatList,
   TouchableOpacity,
   ListRenderItem,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useQuery } from '@tanstack/react-query';
 import { BookingStackParamList, Service, ServiceCategory } from '../../types';
 import { colors, textStyles, spacing, borderRadius, shadows } from '../../theme';
-import { Header, Badge } from '../../components/common';
-import { MOCK_SERVICES } from '../../mocks/data';
+import { Header, Button } from '../../components/common';
+import { servicesService } from '../../services/api/services';
 import { formatCurrency, formatDuration } from '../../utils/formatters';
 import { useBookingStore } from '../../store/bookingStore';
 
@@ -33,10 +35,16 @@ export function ServicesScreen() {
   const [activeCategory, setActiveCategory] = useState<ServiceCategory | 'todos'>('todos');
   const selectService = useBookingStore((s) => s.selectService);
 
+  const { data: services = [], isLoading, isError, refetch } = useQuery({
+    queryKey: ['services'],
+    queryFn: servicesService.getServices,
+    staleTime: 1000 * 60 * 10,
+  });
+
   const filtered =
     activeCategory === 'todos'
-      ? MOCK_SERVICES
-      : MOCK_SERVICES.filter((s) => s.category === activeCategory);
+      ? services
+      : services.filter((s) => s.category === activeCategory);
 
   const handleSelect = (service: Service) => {
     selectService(service);
@@ -77,17 +85,9 @@ export function ServicesScreen() {
         renderItem={({ item }) => (
           <TouchableOpacity
             onPress={() => setActiveCategory(item.key)}
-            style={[
-              styles.categoryChip,
-              activeCategory === item.key && styles.categoryChipActive,
-            ]}
+            style={[styles.categoryChip, activeCategory === item.key && styles.categoryChipActive]}
           >
-            <Text
-              style={[
-                styles.categoryLabel,
-                activeCategory === item.key && styles.categoryLabelActive,
-              ]}
-            >
+            <Text style={[styles.categoryLabel, activeCategory === item.key && styles.categoryLabelActive]}>
               {item.label}
             </Text>
           </TouchableOpacity>
@@ -98,32 +98,42 @@ export function ServicesScreen() {
         contentContainerStyle={styles.categoriesContent}
       />
 
-      {/* Service list */}
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        renderItem={renderService}
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-        ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
-      />
+      {isLoading ? (
+        <View style={styles.stateCenter}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.stateText}>Carregando serviços…</Text>
+        </View>
+      ) : isError ? (
+        <View style={styles.stateCenter}>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.border} />
+          <Text style={styles.stateTitle}>Não foi possível carregar</Text>
+          <Text style={styles.stateText}>Verifique sua conexão e tente novamente.</Text>
+          <Button label="Tentar novamente" onPress={() => refetch()} variant="outline" style={styles.retryBtn} />
+        </View>
+      ) : filtered.length === 0 ? (
+        <View style={styles.stateCenter}>
+          <Ionicons name="cut-outline" size={48} color={colors.border} />
+          <Text style={styles.stateTitle}>Nenhum serviço</Text>
+          <Text style={styles.stateText}>Nenhum serviço nesta categoria no momento.</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          renderItem={renderService}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          ItemSeparatorComponent={() => <View style={{ height: spacing[3] }} />}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  categoriesRow: {
-    maxHeight: 52,
-    marginBottom: spacing[2],
-  },
-  categoriesContent: {
-    paddingHorizontal: spacing[5],
-    gap: spacing[2],
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+  categoriesRow: { maxHeight: 52, marginBottom: spacing[2] },
+  categoriesContent: { paddingHorizontal: spacing[5], gap: spacing[2] },
   categoryChip: {
     paddingHorizontal: spacing[4],
     paddingVertical: 8,
@@ -132,23 +142,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.border,
   },
-  categoryChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  categoryLabel: {
-    ...textStyles.labelMedium,
-    color: colors.textSecondary,
-    fontSize: 13,
-  },
-  categoryLabelActive: {
-    color: colors.textOnPrimary,
-  },
-  list: {
-    paddingHorizontal: spacing[5],
-    paddingBottom: spacing[8],
-    paddingTop: spacing[3],
-  },
+  categoryChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  categoryLabel: { ...textStyles.labelMedium, color: colors.textSecondary, fontSize: 13 },
+  categoryLabelActive: { color: colors.textOnPrimary },
+  list: { paddingHorizontal: spacing[5], paddingBottom: spacing[8], paddingTop: spacing[3] },
   serviceCard: {
     flexDirection: 'row',
     backgroundColor: colors.backgroundCard,
@@ -157,39 +154,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...shadows.sm,
   },
-  serviceLeft: {
+  serviceLeft: { flex: 1, marginRight: spacing[3] },
+  serviceName: { ...textStyles.h3, color: colors.textPrimary, marginBottom: 4 },
+  serviceDesc: { ...textStyles.bodySmall, color: colors.textSecondary, marginBottom: spacing[2] },
+  serviceMeta: { flexDirection: 'row', gap: spacing[3] },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  metaText: { ...textStyles.caption, color: colors.textTertiary },
+  serviceRight: { alignItems: 'flex-end', gap: spacing[2] },
+  servicePrice: { ...textStyles.labelLarge, color: colors.primary },
+  stateCenter: {
     flex: 1,
-    marginRight: spacing[3],
-  },
-  serviceName: {
-    ...textStyles.h3,
-    color: colors.textPrimary,
-    marginBottom: 4,
-  },
-  serviceDesc: {
-    ...textStyles.bodySmall,
-    color: colors.textSecondary,
-    marginBottom: spacing[2],
-  },
-  serviceMeta: {
-    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing[8],
     gap: spacing[3],
   },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  metaText: {
-    ...textStyles.caption,
-    color: colors.textTertiary,
-  },
-  serviceRight: {
-    alignItems: 'flex-end',
-    gap: spacing[2],
-  },
-  servicePrice: {
-    ...textStyles.labelLarge,
-    color: colors.primary,
-  },
+  stateTitle: { ...textStyles.h2, color: colors.textSecondary, textAlign: 'center' },
+  stateText: { ...textStyles.bodySmall, color: colors.textTertiary, textAlign: 'center' },
+  retryBtn: { marginTop: spacing[2] },
 });

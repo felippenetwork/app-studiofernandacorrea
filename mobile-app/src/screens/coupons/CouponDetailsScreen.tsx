@@ -5,15 +5,17 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useQuery } from '@tanstack/react-query';
 import { CouponsStackParamList } from '../../types';
-import { colors, textStyles, spacing, borderRadius, shadows } from '../../theme';
+import { colors, textStyles, spacing, borderRadius } from '../../theme';
 import { Header, Button, Divider } from '../../components/common';
-import { MOCK_COUPONS } from '../../mocks/data';
+import { couponsService } from '../../services/api/coupons';
 import { formatDiscount, formatDateShort } from '../../utils/formatters';
 
 type Nav = NativeStackNavigationProp<CouponsStackParamList, 'CouponDetails'>;
@@ -22,37 +24,67 @@ type Route = RouteProp<CouponsStackParamList, 'CouponDetails'>;
 export function CouponDetailsScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
-  const coupon = MOCK_COUPONS.find((c) => c.id === route.params.couponId);
+  const couponId = route.params.couponId;
 
-  if (!coupon) return null;
+  const { data: coupon, isLoading } = useQuery({
+    queryKey: ['coupon', couponId],
+    queryFn: () => couponsService.getCouponById(couponId),
+    staleTime: 1000 * 60 * 5,
+  });
 
-  const isExpired = coupon.status !== 'ativo';
-  const discountLabel = formatDiscount(coupon.discountType, coupon.discountValue);
-
-  const handleRedeem = () => {
+  const handleCopy = () => {
+    if (!coupon) return;
     Alert.alert(
-      'Cupom copiado!',
-      `O código "${coupon.code}" foi copiado. Use-o ao finalizar seu agendamento.`,
+      'Código copiado!',
+      `O código "${coupon.code}" foi copiado. Use-o ao selecionar um serviço no agendamento.`,
       [{ text: 'Entendido' }]
     );
   };
 
+  if (isLoading) {
+    return (
+      <View style={styles.container}>
+        <Header title="Detalhes do Cupom" showBack onBack={() => navigation.goBack()} />
+        <View style={styles.stateCenter}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </View>
+    );
+  }
+
+  if (!coupon) {
+    return (
+      <View style={styles.container}>
+        <Header title="Detalhes do Cupom" showBack onBack={() => navigation.goBack()} />
+        <View style={styles.stateCenter}>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.border} />
+          <Text style={styles.stateTitle}>Cupom não encontrado</Text>
+          <Button label="Voltar" onPress={() => navigation.goBack()} variant="outline" style={styles.retryBtn} />
+        </View>
+      </View>
+    );
+  }
+
+  const isExpired = coupon.status !== 'ativo';
+  const discountLabel = formatDiscount(coupon.discountType, coupon.discountValue);
+
   return (
     <View style={styles.container}>
-      <Header
-        title="Detalhes do Cupom"
-        showBack
-        onBack={() => navigation.goBack()}
-      />
+      <Header title="Detalhes do Cupom" showBack onBack={() => navigation.goBack()} />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Hero */}
+        {/* Hero gradient */}
         <LinearGradient
           colors={isExpired ? ['#ABABAB', '#CACACA'] : [colors.primary, colors.primaryDark]}
           style={styles.hero}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         >
+          {isExpired && (
+            <View style={styles.expiredChip}>
+              <Text style={styles.expiredText}>Expirado</Text>
+            </View>
+          )}
           <Text style={styles.heroDiscount}>{discountLabel}</Text>
           <Text style={styles.heroTitle}>{coupon.title}</Text>
           <View style={styles.codeRow}>
@@ -68,7 +100,7 @@ export function CouponDetailsScreen() {
 
         <Divider />
 
-        {/* Validity */}
+        {/* Info rows */}
         <View style={styles.section}>
           <View style={styles.infoRow}>
             <Ionicons name="calendar-outline" size={16} color={colors.textTertiary} />
@@ -80,13 +112,25 @@ export function CouponDetailsScreen() {
             </View>
           </View>
 
-          {coupon.minOrderValue && (
+          {coupon.minOrderValue != null && (
             <View style={styles.infoRow}>
-              <Ionicons name="pricetag-outline" size={16} color={colors.textTertiary} />
+              <Ionicons name="cash-outline" size={16} color={colors.textTertiary} />
               <View>
-                <Text style={styles.infoLabel}>Valor mínimo</Text>
+                <Text style={styles.infoLabel}>Pedido mínimo</Text>
                 <Text style={styles.infoValue}>
                   R$ {coupon.minOrderValue.toFixed(2).replace('.', ',')}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {coupon.maxUsages != null && (
+            <View style={styles.infoRow}>
+              <Ionicons name="people-outline" size={16} color={colors.textTertiary} />
+              <View>
+                <Text style={styles.infoLabel}>Usos</Text>
+                <Text style={styles.infoValue}>
+                  {coupon.usedCount} / {coupon.maxUsages} utilizados
                 </Text>
               </View>
             </View>
@@ -96,31 +140,20 @@ export function CouponDetailsScreen() {
         <Divider />
 
         {/* Rules */}
-        <View style={styles.section}>
-          <Text style={styles.rulesTitle}>Regras e Condições</Text>
-          {coupon.rules.map((rule, i) => (
-            <View key={i} style={styles.ruleRow}>
-              <View style={styles.ruleDot} />
-              <Text style={styles.ruleText}>{rule}</Text>
-            </View>
-          ))}
-        </View>
-
-        {!isExpired && (
-          <Button
-            label="Copiar código do cupom"
-            onPress={handleRedeem}
-            style={styles.cta}
-          />
+        {coupon.rules.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.rulesTitle}>Regras de uso</Text>
+            {coupon.rules.map((rule, i) => (
+              <View key={i} style={styles.ruleRow}>
+                <View style={styles.ruleDot} />
+                <Text style={styles.ruleText}>{rule}</Text>
+              </View>
+            ))}
+          </View>
         )}
 
-        {isExpired && (
-          <View style={styles.expiredBanner}>
-            <Ionicons name="time-outline" size={16} color={colors.textTertiary} />
-            <Text style={styles.expiredText}>
-              Este cupom está {coupon.status === 'expirado' ? 'expirado' : 'esgotado'} e não pode mais ser utilizado.
-            </Text>
-          </View>
+        {!isExpired && (
+          <Button label="Copiar código" onPress={handleCopy} style={styles.cta} />
         )}
       </ScrollView>
     </View>
@@ -128,88 +161,66 @@ export function CouponDetailsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  content: {
-    paddingBottom: spacing[8],
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { paddingBottom: spacing[8] },
   hero: {
-    marginHorizontal: spacing[5],
+    margin: spacing[5],
     borderRadius: borderRadius.lg,
     padding: spacing[6],
-    marginBottom: spacing[5],
     alignItems: 'center',
-    ...shadows.md,
+    gap: spacing[2],
   },
-  heroDiscount: {
-    ...textStyles.displayMedium,
-    color: colors.textOnPrimary,
+  expiredChip: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing[3],
+    paddingVertical: 3,
     marginBottom: spacing[2],
   },
-  heroTitle: {
-    ...textStyles.h2,
-    color: 'rgba(255,255,255,0.85)',
+  expiredText: { ...textStyles.caption, color: colors.textOnPrimary },
+  heroDiscount: {
+    fontFamily: 'PlayfairDisplay_700Bold',
+    fontSize: 48,
+    color: colors.textOnPrimary,
     textAlign: 'center',
-    marginBottom: spacing[5],
   },
-  codeRow: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: borderRadius.sm,
-    paddingHorizontal: spacing[5],
-    paddingVertical: spacing[3],
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-    borderStyle: 'dashed',
-  },
+  heroTitle: { ...textStyles.h2, color: 'rgba(255,255,255,0.85)', textAlign: 'center' },
+  codeRow: { alignItems: 'center', marginTop: spacing[3] },
   codeLabel: {
-    ...textStyles.labelSmall,
-    color: 'rgba(255,255,255,0.7)',
+    ...textStyles.caption,
+    color: 'rgba(255,255,255,0.65)',
     letterSpacing: 2,
-    marginBottom: 2,
+    textTransform: 'uppercase',
   },
   codeValue: {
-    ...textStyles.h1,
+    fontFamily: 'JosefinSans_700Bold',
+    fontSize: 28,
     color: colors.textOnPrimary,
-    letterSpacing: 3,
+    letterSpacing: 6,
+    marginTop: 4,
   },
-  section: {
-    paddingHorizontal: spacing[5],
-    paddingVertical: spacing[4],
-    gap: spacing[3],
-  },
-  description: {
-    ...textStyles.bodyLarge,
-    color: colors.textSecondary,
-    lineHeight: 26,
-  },
+  section: { paddingHorizontal: spacing[5], paddingVertical: spacing[4] },
+  description: { ...textStyles.bodyMedium, color: colors.textSecondary, lineHeight: 22 },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing[3],
+    marginBottom: spacing[3],
   },
   infoLabel: {
     ...textStyles.caption,
     color: colors.textTertiary,
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
     marginBottom: 2,
   },
-  infoValue: {
-    ...textStyles.bodyMedium,
-    color: colors.textPrimary,
-  },
-  rulesTitle: {
-    ...textStyles.h3,
-    color: colors.textPrimary,
-    marginBottom: spacing[2],
-  },
+  infoValue: { ...textStyles.bodyMedium, color: colors.textPrimary },
+  rulesTitle: { ...textStyles.h3, color: colors.textPrimary, marginBottom: spacing[3] },
   ruleRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: spacing[3],
+    gap: spacing[2],
+    marginBottom: spacing[2],
   },
   ruleDot: {
     width: 5,
@@ -217,6 +228,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: colors.primary,
     marginTop: 7,
+    flexShrink: 0,
   },
   ruleText: {
     ...textStyles.bodySmall,
@@ -224,23 +236,13 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 20,
   },
-  cta: {
-    marginHorizontal: spacing[5],
-    marginTop: spacing[4],
-  },
-  expiredBanner: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing[2],
-    backgroundColor: colors.divider,
-    marginHorizontal: spacing[5],
-    marginTop: spacing[4],
-    borderRadius: borderRadius.sm,
-    padding: spacing[4],
-  },
-  expiredText: {
-    ...textStyles.bodySmall,
-    color: colors.textTertiary,
+  cta: { marginHorizontal: spacing[5], marginTop: spacing[2] },
+  stateCenter: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[3],
   },
+  stateTitle: { ...textStyles.h2, color: colors.textSecondary },
+  retryBtn: { marginTop: spacing[2] },
 });

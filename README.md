@@ -27,49 +27,29 @@ cd mobile-app
 npm install
 ```
 
-### Rodar em desenvolvimento (modo mock — sem backend)
+### Rodar em modo mock (sem backend)
 
 ```bash
 npx expo start
 ```
 
-Escanear o QR Code com o Expo Go no celular.
+Escanear o QR Code com o Expo Go. Todos os dados são locais — nenhuma configuração extra necessária.
 
-### Rodar conectado ao backend real
+### Ligar/desligar mocks
 
-1. Criar `mobile-app/.env.local` baseado em `.env.example`
-2. Preencher `EXPO_PUBLIC_API_URL` com o IP da máquina (ex: `http://192.168.0.10:3000/api`)
+| Arquivo | Variável | Valor | Efeito |
+|---------|----------|-------|--------|
+| `mobile-app/.env.local` | `EXPO_PUBLIC_USE_MOCK` | `true` | Dados locais (padrão) |
+| `mobile-app/.env.local` | `EXPO_PUBLIC_USE_MOCK` | `false` | API real |
+
+### Conectar ao backend real
+
+1. Copiar: `cp mobile-app/.env.example mobile-app/.env.local`
+2. Editar `EXPO_PUBLIC_API_URL` com o IP da sua máquina (ex: `http://192.168.0.10:3000/api`)
 3. Definir `EXPO_PUBLIC_USE_MOCK=false`
-4. Rodar `npx expo start`
+4. Rodar: `npx expo start`
 
-### Variáveis de ambiente
-
-| Variável | Padrão | Descrição |
-|----------|--------|-----------|
-| `EXPO_PUBLIC_API_URL` | `http://localhost:3000/api` | URL do backend |
-| `EXPO_PUBLIC_USE_MOCK` | `true` | `false` para usar API real |
-
-### Telas disponíveis (17)
-
-| Tela | Rota |
-|------|------|
-| Splash | AuthStack > Splash |
-| Onboarding | AuthStack > Onboarding |
-| Login | AuthStack > Login |
-| Cadastro | AuthStack > Register |
-| Home | Tab: Home |
-| Serviços | Tab: Agendar > Services |
-| Profissional | Tab: Agendar > Professional |
-| Calendário | Tab: Agendar > Schedule |
-| Horários | Tab: Agendar > TimeSelection |
-| Resumo | Tab: Agendar > Summary |
-| Pagamento | Tab: Agendar > Payment |
-| Meus Agendamentos | Tab: Horários |
-| Cupons | Tab: Cupons |
-| Detalhes do Cupom | Tab: Cupons > CouponDetails |
-| Benefícios | Tab: Perfil > Benefits |
-| Notificações | Tab: Perfil > Notifications |
-| Perfil | Tab: Perfil |
+> O celular e o computador precisam estar na mesma rede Wi-Fi.
 
 ---
 
@@ -78,8 +58,6 @@ Escanear o QR Code com o Expo Go no celular.
 ### Pré-requisitos
 
 - Node.js 18+
-- npm 9+
-- Supabase account (ou rodar sem Supabase em modo mock)
 
 ### Instalação
 
@@ -88,126 +66,65 @@ cd backend-api
 npm install
 ```
 
-### Configuração
+### Configuração mínima (sem integrações externas)
 
 ```bash
-cp .env.example .env
-# Editar .env com suas credenciais
+cp backend-api/.env.example backend-api/.env
 ```
 
-**Mínimo para rodar em desenvolvimento (sem Supabase):**
+Edite o `.env` com pelo menos:
 
 ```env
 PORT=3000
 NODE_ENV=development
-JWT_SECRET=qualquer-string-longa-aqui
-JWT_REFRESH_SECRET=outra-string-longa-aqui
+JWT_SECRET=qualquer-string-secreta-longa
+JWT_REFRESH_SECRET=outra-string-secreta-longa
 ```
 
-> Sem `SUPABASE_URL`/`SUPABASE_SERVICE_KEY`, o backend usa dados mockados em memória.
+Sem `SUPABASE_URL`, o backend usa dados em memória. Sem `TRINKS_API_KEY`, usa horários mockados. Sem `MP_ACCESS_TOKEN`, os pagamentos são simulados automaticamente.
 
-### Rodar em desenvolvimento
+### Rodar
 
 ```bash
-npm run dev
+cd backend-api
+npm run dev      # desenvolvimento com hot reload
+npm run build    # build de produção
+npm start        # rodar build de produção
 ```
-
-### Build para produção
-
-```bash
-npm run build
-npm start
-```
-
-### Endpoints da API
-
-#### Auth
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| POST | `/api/auth/register` | Cadastro de cliente |
-| POST | `/api/auth/login` | Login |
-| POST | `/api/auth/refresh` | Renovar token |
-| POST | `/api/auth/logout` | Logout |
-
-#### Usuários
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/users/me` | Perfil da usuária |
-| PATCH | `/api/users/me` | Atualizar perfil |
-| POST | `/api/users/me/push-token` | Registrar push token |
-
-#### Agendamentos
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/appointments/me` | Meus agendamentos |
-| POST | `/api/appointments` | Criar agendamento |
-| PATCH | `/api/appointments/:id/cancel` | Cancelar |
-| GET | `/api/appointments/available-slots` | Horários disponíveis |
-
-#### Trinks
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/trinks/services` | Lista de serviços |
-| GET | `/api/trinks/professionals` | Lista de profissionais |
-| POST | `/api/trinks/webhooks` | Webhook Trinks |
-
-#### Cupons
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/coupons` | Cupons disponíveis |
-| POST | `/api/coupons/validate` | Validar cupom |
-| POST | `/api/coupons/redeem` | Resgatar cupom |
-
-#### Benefícios
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/benefits` | Lista de benefícios |
-
-#### Pagamentos
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| POST | `/api/payments/booking-fee` | Pagar taxa de reserva (R$40) |
-| POST | `/api/payments/webhook` | Webhook Mercado Pago |
-
-#### Notificações
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/notifications` | Minhas notificações |
-| PATCH | `/api/notifications/:id/read` | Marcar como lida |
 
 ---
 
-## Banco de Dados (Supabase)
+## Configurar Supabase
 
-### Setup inicial
-
-1. Criar projeto no [Supabase](https://supabase.com)
+1. Criar projeto em [supabase.com](https://supabase.com)
 2. Acessar **SQL Editor** no painel
 3. Executar `backend-api/src/database/schema.sql`
 4. Executar `backend-api/src/database/seed.sql` (dados iniciais)
+5. Copiar **URL** e **service_role key** para o `.env`:
 
-### Tabelas
+```env
+SUPABASE_URL=https://seu-projeto.supabase.co
+SUPABASE_SERVICE_KEY=sua-service-role-key
+```
 
-| Tabela | Descrição |
-|--------|-----------|
+### O que é persistido no banco
+
+| Tabela | Dados |
+|--------|-------|
 | `users` | Clientes cadastradas |
 | `services` | Serviços do estúdio |
 | `professionals` | Profissionais |
 | `appointments` | Agendamentos |
-| `payments` | Pagamentos (taxa de reserva R$40) |
+| `payments` | Pagamentos (taxa R$40) |
 | `coupons` | Cupons de desconto |
-| `coupon_redemptions` | Resgates de cupons |
-| `benefits` | Benefícios e promoções |
+| `coupon_redemptions` | Histórico de resgates |
+| `benefits` | Benefícios e campanhas |
 | `push_tokens` | Tokens para push notifications |
 | `trinks_webhook_events` | Log de eventos Trinks |
 
 ---
 
-## Integrações Externas
-
-### Trinks (agendamento)
-
-Configure em `.env`:
+## Configurar Trinks
 
 ```env
 TRINKS_API_URL=https://api.trinks.com
@@ -215,11 +132,12 @@ TRINKS_API_KEY=sua-chave-aqui
 TRINKS_COMPANY_ID=seu-id-aqui
 ```
 
-> Sem essas variáveis, o backend usa dados mockados automaticamente.
+Sem essas variáveis, o backend usa serviços, profissionais e slots mockados.
+O app mobile **nunca** acessa a Trinks diretamente — sempre via backend.
 
-### Mercado Pago (pagamentos)
+---
 
-Configure em `.env`:
+## Configurar Mercado Pago
 
 ```env
 MP_ACCESS_TOKEN=seu-access-token
@@ -227,31 +145,101 @@ MP_PUBLIC_KEY=sua-public-key
 MP_WEBHOOK_SECRET=seu-webhook-secret
 ```
 
-> Sem o `MP_ACCESS_TOKEN`, o pagamento é simulado (aprovado instantaneamente).
+Sem `MP_ACCESS_TOKEN`, os pagamentos são **simulados** com aprovação instantânea — ideal para desenvolvimento e testes.
 
 ---
 
-## Fluxo de Agendamento
+## Fluxo completo de agendamento
 
 ```
-Cliente escolhe serviço
-        ↓
-Escolhe profissional
-        ↓
-Escolhe data no calendário
-        ↓
-Escolhe horário disponível (via Trinks)
-        ↓
-Revisa resumo (preço serviço + taxa R$40)
-        ↓
-Paga a taxa de reserva R$40 (Mercado Pago)
-        ↓
-Agendamento confirmado no Trinks
-        ↓
-Cliente recebe push notification de confirmação
-        ↓
-No dia do serviço: paga o restante presencialmente
+1. Cliente escolhe o serviço
+2. Escolhe a profissional
+3. Escolhe a data no calendário
+4. Escolhe o horário disponível  ← consultado via Trinks
+5. Revisa o resumo:
+   - Valor do serviço: R$ X,00
+   - Taxa de reserva:  R$ 40,00  ← paga agora
+   - Restante no dia:  R$ X-40   ← pago presencialmente
+6. Seleciona forma de pagamento (Pix / crédito / débito)
+7. Paga R$40 via Mercado Pago    ← ou simulado em dev
+8. Agendamento confirmado no Trinks
+9. Push notification de confirmação enviada
+10. No dia: paga o restante presencialmente
 ```
+
+---
+
+## Endpoints da API
+
+### Auth
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| POST | `/api/auth/register` | Cadastro |
+| POST | `/api/auth/login` | Login |
+| POST | `/api/auth/refresh` | Renovar token |
+| POST | `/api/auth/logout` | Logout |
+
+### Usuários
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/api/users/me` | Meu perfil |
+| PATCH | `/api/users/me` | Atualizar perfil |
+| POST | `/api/users/me/push-token` | Registrar push token |
+
+### Agendamentos
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/api/appointments/me` | Meus agendamentos |
+| GET | `/api/appointments/:id` | Detalhes |
+| POST | `/api/appointments` | Criar agendamento |
+| PATCH | `/api/appointments/:id/cancel` | Cancelar |
+| GET | `/api/appointments/available-slots` | Horários disponíveis |
+
+### Trinks (serviços e profissionais)
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/api/trinks/services` | Lista de serviços |
+| GET | `/api/trinks/professionals` | Lista de profissionais |
+| POST | `/api/trinks/webhooks` | Webhook Trinks |
+
+### Pagamentos
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| POST | `/api/payments/booking-fee` | Pagar taxa R$40 |
+| POST | `/api/payments/webhook` | Webhook Mercado Pago |
+
+### Cupons
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/api/coupons` | Listar cupons |
+| GET | `/api/coupons/:id` | Detalhes do cupom |
+| POST | `/api/coupons/validate` | Validar código |
+| POST | `/api/coupons/redeem` | Resgatar cupom |
+
+### Benefícios
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/api/benefits` | Listar benefícios |
+
+### Notificações
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/api/notifications` | Minhas notificações |
+| PATCH | `/api/notifications/:id/read` | Marcar como lida |
+| POST | `/api/notifications/register-token` | Registrar push token |
+| DELETE | `/api/notifications/register-token` | Remover token |
+
+---
+
+## Status dos agendamentos
+
+| Status | Descrição |
+|--------|-----------|
+| `pendente_pagamento` | Criado, aguardando taxa de reserva |
+| `confirmado` | Taxa paga, horário garantido |
+| `cancelado` | Cancelado pela cliente ou sistema |
+| `concluido` | Atendimento realizado |
+| `nao_compareceu` | Cliente não compareceu |
 
 ---
 
@@ -262,46 +250,41 @@ No dia do serviço: paga o restante presencialmente
 - TypeScript
 - React Navigation v6
 - Zustand (estado global)
-- TanStack Query v5 (cache e sincronização)
-- Axios (HTTP)
-- Expo Notifications
+- TanStack Query v5 (cache e sincronização com pull-to-refresh)
+- Axios (HTTP + interceptors de auth e 401)
+- Expo Notifications (push tokens)
 
 ### Backend
-- Node.js + Express
-- TypeScript
-- Supabase (PostgreSQL)
-- JWT (jsonwebtoken)
-- bcryptjs
-- Zod (validação)
+- Node.js + Express + TypeScript
+- Supabase (PostgreSQL) com fallback em memória
+- JWT (access 7d + refresh 30d)
+- bcryptjs (12 rounds)
+- Zod (validação de todos os inputs)
 - Axios (cliente Trinks)
 
 ---
 
-## Desenvolvimento
-
-### Scripts úteis
+## Scripts úteis
 
 ```bash
-# Mobile — iniciar Expo
-cd mobile-app && npx expo start
+# Mobile
+cd mobile-app
+npx expo start           # iniciar dev server
+npx tsc --noEmit         # verificar TypeScript
 
-# Mobile — TypeScript check
-cd mobile-app && npx tsc --noEmit
-
-# Backend — dev com hot reload
-cd backend-api && npm run dev
-
-# Backend — build
-cd backend-api && npm run build
-
-# Backend — TypeScript check
-cd backend-api && npx tsc --noEmit
+# Backend
+cd backend-api
+npm run dev              # hot reload
+npm run build            # compilar
+npx tsc --noEmit         # verificar TypeScript
 ```
 
-### Convenções
+---
 
-- Commits em português, imperativo: "Adiciona tela de perfil"
-- Branch principal: `main`
-- Feature branches: `feature/nome-da-feature`
-- Todo código backend em TypeScript estrito
-- Validação de inputs com Zod em todos os endpoints
+## Matriz de modos de operação
+
+| Cenário | Supabase | Trinks | Mercado Pago | Comportamento |
+|---------|----------|--------|--------------|---------------|
+| Dev local | ✗ | ✗ | ✗ | Tudo mockado em memória |
+| Staging | ✓ | ✗ | ✗ | DB real, slots mock, pagamento simulado |
+| Produção | ✓ | ✓ | ✓ | Fluxo completo real |
