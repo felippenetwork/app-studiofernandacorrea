@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "Studio Fernanda Correa",
+    "slug": "studio-fernanda-correa",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F8F5F2"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.studiofernandacorrea.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F8F5F2"
+      },
+      "package": "com.studiofernandacorrea.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "color": "#C9A4A0"
+        }
+      ]
+    ]
+  }
+}

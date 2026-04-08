@@ -1,0 +1,9 @@
+{
+  "name": "studio-fernanda-correa",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "mobile": "cd mobile-app && npx expo start",
+    "backend": "cd backend-api && npm run dev"
+  }
+}

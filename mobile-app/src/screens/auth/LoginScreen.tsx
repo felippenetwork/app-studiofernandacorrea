@@ -1,0 +1,174 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { AuthStackParamList } from '../../types';
+import { colors, textStyles, spacing } from '../../theme';
+import { Button, Input } from '../../components/common';
+import { useAuthStore } from '../../store/authStore';
+import { MOCK_USER } from '../../mocks/data';
+
+type Props = {
+  navigation: NativeStackNavigationProp<AuthStackParamList, 'Login'>;
+};
+
+export function LoginScreen({ navigation }: Props) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const { setUser } = useAuthStore();
+
+  const handleLogin = async () => {
+    if (!email || !password) {
+      setError('Preencha e-mail e senha.');
+      return;
+    }
+    setError('');
+    setLoading(true);
+
+    // Simulates API call — replace with real auth later
+    await new Promise((r) => setTimeout(r, 1200));
+    setUser(MOCK_USER, { accessToken: 'mock-token', refreshToken: 'mock-refresh' });
+    setLoading(false);
+  };
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.title}>Bem-vinda de volta</Text>
+          <Text style={styles.subtitle}>Acesse sua conta para continuar</Text>
+        </View>
+
+        {/* Form */}
+        <View style={styles.form}>
+          {error ? (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+
+          <Input
+            label="E-mail"
+            placeholder="seu@email.com"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoComplete="email"
+            leftIcon="mail-outline"
+          />
+
+          <Input
+            label="Senha"
+            placeholder="Sua senha"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            leftIcon="lock-closed-outline"
+          />
+
+          <TouchableOpacity style={styles.forgotBtn}>
+            <Text style={styles.forgotText}>Esqueceu a senha?</Text>
+          </TouchableOpacity>
+
+          <Button
+            label="Entrar"
+            onPress={handleLogin}
+            loading={loading}
+            style={styles.loginBtn}
+          />
+        </View>
+
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Não tem conta? </Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+            <Text style={styles.footerLink}>Cadastre-se</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  container: {
+    flexGrow: 1,
+    paddingHorizontal: spacing[6],
+    paddingTop: 80,
+    paddingBottom: spacing[8],
+  },
+  header: {
+    marginBottom: spacing[8],
+  },
+  title: {
+    ...textStyles.displaySmall,
+    color: colors.textPrimary,
+    marginBottom: spacing[2],
+  },
+  subtitle: {
+    ...textStyles.bodyMedium,
+    color: colors.textSecondary,
+  },
+  form: {
+    flex: 1,
+  },
+  errorBanner: {
+    backgroundColor: colors.errorLight,
+    borderRadius: 8,
+    padding: spacing[3],
+    marginBottom: spacing[4],
+  },
+  errorText: {
+    ...textStyles.bodySmall,
+    color: colors.error,
+  },
+  forgotBtn: {
+    alignSelf: 'flex-end',
+    marginTop: -8,
+    marginBottom: spacing[6],
+  },
+  forgotText: {
+    ...textStyles.bodySmall,
+    color: colors.primary,
+  },
+  loginBtn: {
+    marginTop: spacing[2],
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: spacing[6],
+  },
+  footerText: {
+    ...textStyles.bodySmall,
+    color: colors.textSecondary,
+  },
+  footerLink: {
+    ...textStyles.labelMedium,
+    color: colors.primary,
+  },
+});
