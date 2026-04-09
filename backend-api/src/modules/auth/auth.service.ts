@@ -41,7 +41,6 @@ export const authService = {
     const passwordHash = await bcrypt.hash(input.password, SALT_ROUNDS);
 
     if (!hasSupabase) {
-      // In-memory mock — useful in dev without Supabase
       const existing = mockUsers.find((u) => u.email === input.email);
       if (existing) throw new Error('E-mail já cadastrado.');
 
@@ -52,6 +51,12 @@ export const authService = {
         phone: input.phone ?? null,
         avatar_url: null,
         password_hash: passwordHash,
+        birth_date: input.birth_date ?? null,
+        accepts_marketing: input.accepts_marketing ?? false,
+        accepts_push: input.accepts_push ?? true,
+        is_vip: false,
+        is_blocked: false,
+        internal_notes: null,
         is_active: true,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -60,7 +65,6 @@ export const authService = {
       return { user: sanitizeUser(user), tokens: generateTokens(user) };
     }
 
-    // Check if email already exists
     const { data: existing } = await supabase
       .from('users')
       .select('id')
@@ -76,6 +80,9 @@ export const authService = {
         email: input.email,
         phone: input.phone ?? null,
         password_hash: passwordHash,
+        birth_date: input.birth_date ?? null,
+        accepts_marketing: input.accepts_marketing ?? false,
+        accepts_push: input.accepts_push ?? true,
       })
       .select()
       .single();
@@ -121,7 +128,7 @@ export const authService = {
 
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, name, email, phone, avatar_url, is_active, created_at, updated_at')
+      .select('id, name, email, phone, avatar_url, birth_date, accepts_marketing, accepts_push, is_vip, is_blocked, is_active, created_at, updated_at')
       .eq('id', id)
       .single();
 

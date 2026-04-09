@@ -76,6 +76,44 @@ export const pushService = {
       sound: 'default',
     });
   },
+
+  /**
+   * Sends a push notification to a list of raw token strings.
+   * Used by push campaigns for bulk delivery.
+   */
+  async sendBulk(tokens: string[], message: PushMessage): Promise<{ sent: number; failed: number }> {
+    if (tokens.length === 0) return { sent: 0, failed: 0 };
+    const messages = tokens.map((token) => ({ to: token, ...message, sound: message.sound ?? 'default' as const }));
+    let sent = 0;
+    let failed = 0;
+    const chunks = chunk(messages, 100);
+    for (const batch of chunks) {
+      try {
+        const response = await axios.post(EXPO_PUSH_URL, batch, {
+          headers: { Accept: 'application/json', 'Accept-Encoding': 'gzip, deflate', 'Content-Type': 'application/json' },
+          timeout: 10000,
+        });
+        const results: any[] = response.data?.data ?? [];
+        for (let i = 0; i < results.length; i++) {
+          const result = results[i];
+          if (result.status === 'ok') {
+            sent++;
+          } else {
+            failed++;
+            if (result.details?.error === 'DeviceNotRegistered') {
+              await deactivateToken(batch[i].to).catch(() => {});
+            }
+          }
+        }
+        // If Expo doesn't return per-item results, count as all sent
+        if (results.length === 0) sent += batch.length;
+      } catch (err) {
+        console.error('[push] Bulk send batch failed:', (err as Error).message);
+        failed += batch.length;
+      }
+    }
+    return { sent, failed };
+  },
 };
 
 // ─── Internals ────────────────────────────────────────────────────────────────

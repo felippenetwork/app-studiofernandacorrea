@@ -125,6 +125,22 @@ export const birthdayApi = {
 export const pushCampaignsApi = {
   list: () => apiClient.get('/admin/push-campaigns').then((r) => r.data.data),
   create: (data: any) => apiClient.post('/admin/push-campaigns', data).then((r) => r.data.data),
+  send: (id: string) => apiClient.post(`/admin/push-campaigns/${id}/send`).then((r) => r.data),
+};
+
+// ─── Feedback ─────────────────────────────────────────────────────────────────
+
+export const feedbackApi = {
+  list: (params?: { status?: string; page?: number; limit?: number }) =>
+    apiClient.get('/admin/feedback', { params }).then((r) => r.data.data),
+  updateStatus: (id: string, status: 'aprovado' | 'rejeitado') =>
+    apiClient.patch(`/admin/feedback/${id}/status`, { status }).then((r) => r.data),
+};
+
+// ─── Reviews ──────────────────────────────────────────────────────────────────
+
+export const reviewsApi = {
+  summary: () => apiClient.get('/admin/reviews/summary').then((r) => r.data.data),
 };
 
 // ─── App Settings ─────────────────────────────────────────────────────────────

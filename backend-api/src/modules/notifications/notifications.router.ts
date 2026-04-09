@@ -64,7 +64,33 @@ notificationsRouter.get('/', async (req: Request, res: Response): Promise<void> 
   }
 });
 
-// ─── PATCH /api/notifications/:id/read — mark as read ────────────────────────
+// ─── PATCH /api/notifications/read-all — mark all as read ────────────────────
+// IMPORTANT: must be registered BEFORE /:id to avoid route conflict
+
+notificationsRouter.patch('/read-all', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id: userId } = (req as AuthenticatedRequest).user;
+
+    if (!hasSupabase) {
+      MOCK_NOTIFICATIONS.forEach((n) => { n.is_read = true; });
+      res.json({ data: null, message: 'Todas as notificações marcadas como lidas.' });
+      return;
+    }
+
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('user_id', userId)
+      .eq('is_read', false);
+
+    if (error) throw error;
+    res.json({ data: null, message: 'Todas as notificações marcadas como lidas.' });
+  } catch (err) {
+    res.status(500).json({ error: 'InternalError', message: (err as Error).message });
+  }
+});
+
+// ─── PATCH /api/notifications/:id/read — mark single as read ─────────────────
 
 notificationsRouter.patch('/:id/read', async (req: Request, res: Response): Promise<void> => {
   try {
@@ -86,31 +112,6 @@ notificationsRouter.patch('/:id/read', async (req: Request, res: Response): Prom
 
     if (error) throw error;
     res.json({ data: null, message: 'Notificação marcada como lida.' });
-  } catch (err) {
-    res.status(500).json({ error: 'InternalError', message: (err as Error).message });
-  }
-});
-
-// ─── PATCH /api/notifications/read-all — mark all as read ────────────────────
-
-notificationsRouter.patch('/read-all', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { id: userId } = (req as AuthenticatedRequest).user;
-
-    if (!hasSupabase) {
-      MOCK_NOTIFICATIONS.forEach((n) => { n.is_read = true; });
-      res.json({ data: null, message: 'Todas as notificações marcadas como lidas.' });
-      return;
-    }
-
-    const { error } = await supabase
-      .from('notifications')
-      .update({ is_read: true })
-      .eq('user_id', userId)
-      .eq('is_read', false);
-
-    if (error) throw error;
-    res.json({ data: null, message: 'Todas as notificações marcadas como lidas.' });
   } catch (err) {
     res.status(500).json({ error: 'InternalError', message: (err as Error).message });
   }

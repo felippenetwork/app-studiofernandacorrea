@@ -2,28 +2,10 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MessageSquare, Loader2, Star, CheckCircle2, XCircle, ThumbsUp, ThumbsDown } from 'lucide-react';
-import { apiClient } from '@/lib/api';
+import { feedbackApi } from '@/lib/api';
+import { Feedback } from '@/types';
 import { formatDateTime } from '@/lib/formatters';
 import { getErrorMessage } from '@/lib/utils';
-
-interface Feedback {
-  id: string;
-  userName: string;
-  userEmail?: string;
-  rating: number;
-  comment: string;
-  professionalName?: string;
-  serviceName?: string;
-  status: 'pendente' | 'aprovado' | 'rejeitado';
-  createdAt: string;
-}
-
-const feedbackApi = {
-  list: (params?: { status?: string; page?: number }) =>
-    apiClient.get('/admin/feedback', { params }).then((r) => r.data),
-  updateStatus: (id: string, status: string) =>
-    apiClient.patch(`/admin/feedback/${id}/status`, { status }).then((r) => r.data),
-};
 
 function Stars({ rating }: { rating: number }) {
   return (
@@ -40,7 +22,6 @@ const statusColor: Record<string, string> = {
   aprovado: 'bg-green-100 text-green-700',
   rejeitado: 'bg-red-100 text-red-700',
 };
-
 const statusLabel: Record<string, string> = {
   pendente: 'Pendente',
   aprovado: 'Aprovado',
@@ -55,20 +36,21 @@ export default function FeedbackPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['feedback', statusFilter, page],
-    queryFn: () => feedbackApi.list({ status: statusFilter || undefined, page }),
+    queryFn: () => feedbackApi.list({ status: statusFilter || undefined, page, limit: 20 }),
   });
 
-  const items: Feedback[] = data?.items ?? data?.data ?? [];
+  const items: Feedback[] = data?.items ?? [];
   const total: number = data?.total ?? 0;
   const totalPages = Math.ceil(total / 20) || 1;
 
+  const pendingCount = items.filter((i) => i.status === 'pendente').length;
+
   const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) => feedbackApi.updateStatus(id, status),
+    mutationFn: ({ id, status }: { id: string; status: 'aprovado' | 'rejeitado' }) =>
+      feedbackApi.updateStatus(id, status),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['feedback'] }),
     onError: (e) => setError(getErrorMessage(e)),
   });
-
-  const pendingCount = items.filter((i) => i.status === 'pendente').length;
 
   return (
     <div className="space-y-6">
@@ -88,7 +70,7 @@ export default function FeedbackPage() {
 
       {/* Filters */}
       <div className="flex gap-2 flex-wrap">
-        {['', 'pendente', 'aprovado', 'rejeitado'].map((s) => (
+        {(['', 'pendente', 'aprovado', 'rejeitado'] as const).map((s) => (
           <button
             key={s}
             onClick={() => { setStatusFilter(s); setPage(1); }}

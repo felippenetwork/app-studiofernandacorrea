@@ -30,6 +30,9 @@ usersRouter.get('/me', async (req: Request, res: Response): Promise<void> => {
 const updateSchema = z.object({
   name: z.string().min(2).max(255).optional(),
   phone: z.string().min(10).optional(),
+  birth_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida (use YYYY-MM-DD)').optional().nullable(),
+  accepts_marketing: z.boolean().optional(),
+  accepts_push: z.boolean().optional(),
 });
 
 // PATCH /api/users/me

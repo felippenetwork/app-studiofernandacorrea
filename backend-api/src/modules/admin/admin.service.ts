@@ -408,4 +408,161 @@ export const adminService = {
     if (error) throw new Error(error.message);
     return data;
   },
+
+  async sendPushCampaign(campaignId: string) {
+    // Import push service dynamically to avoid circular deps
+    const { pushService } = await import('../../services/push.service');
+
+    if (!hasSupabase) {
+      // Mock: simulate sending to all mock users
+      const mockCount = 3;
+      console.log(`[push-campaigns] Mock send: campaign ${campaignId}, ${mockCount} tokens`);
+      return { sent: mockCount, failed: 0 };
+    }
+
+    const { data: campaign, error: ce } = await supabase
+      .from('push_campaigns')
+      .select('*')
+      .eq('id', campaignId)
+      .single();
+
+    if (ce || !campaign) throw new Error('Campanha não encontrada.');
+    if (campaign.status === 'enviada') throw new Error('Campanha já foi enviada.');
+
+    // Fetch active push tokens based on segment
+    let query = supabase.from('push_tokens').select('user_id, token').eq('is_active', true);
+    if (campaign.segment === 'vip') {
+      const { data: vipUsers } = await supabase.from('users').select('id').eq('is_vip', true);
+      const vipIds = (vipUsers ?? []).map((u: any) => u.id);
+      if (vipIds.length > 0) query = query.in('user_id', vipIds);
+    } else if (campaign.segment === 'marketing') {
+      const { data: mktUsers } = await supabase.from('users').select('id').eq('accepts_marketing', true);
+      const mktIds = (mktUsers ?? []).map((u: any) => u.id);
+      if (mktIds.length > 0) query = query.in('user_id', mktIds);
+    }
+
+    const { data: tokens } = await query;
+    const tokenList: string[] = (tokens ?? []).map((t: any) => t.token);
+
+    let sent = 0;
+    let failed = 0;
+
+    if (tokenList.length > 0) {
+      const results = await pushService.sendBulk(tokenList, {
+        title: campaign.title,
+        body: campaign.body,
+        data: { type: 'campanha', campaignId },
+      });
+      sent = results.sent;
+      failed = results.failed;
+    }
+
+    // Update campaign status
+    await supabase
+      .from('push_campaigns')
+      .update({ status: 'enviada', sent_count: sent, sent_at: new Date().toISOString() })
+      .eq('id', campaignId);
+
+    return { sent, failed };
+  },
+
+  // ─── Feedback ────────────────────────────────────────────────────────────────
+
+  MOCK_FEEDBACK: [
+    { id: 'fb-1', user_name: 'Ana Silva', user_email: 'ana@email.com', rating: 5, comment: 'Atendimento excelente! A Fernanda é incrível.', professional_name: 'Fernanda Correa', service_name: 'Coloração', status: 'pendente', created_at: new Date(Date.now() - 86400000).toISOString() },
+    { id: 'fb-2', user_name: 'Carla Mendes', user_email: 'carla@email.com', rating: 4, comment: 'Muito boa experiência, voltarei com certeza.', professional_name: 'Juliana Santos', service_name: 'Corte Feminino', status: 'aprovado', created_at: new Date(Date.now() - 2*86400000).toISOString() },
+    { id: 'fb-3', user_name: 'Bianca Costa', user_email: 'bianca@email.com', rating: 2, comment: 'Esperei muito tempo, não gostei do resultado.', professional_name: 'Fernanda Correa', service_name: 'Hidratação', status: 'pendente', created_at: new Date(Date.now() - 3*86400000).toISOString() },
+    { id: 'fb-4', user_name: 'Mariana Lima', user_email: 'mariana@email.com', rating: 5, comment: 'Perfeito! Super recomendo!', professional_name: 'Juliana Santos', service_name: 'Manicure', status: 'aprovado', created_at: new Date(Date.now() - 4*86400000).toISOString() },
+  ] as any[],
+
+  async listFeedback(params: { status?: string; page: number; limit: number }) {
+    const { page, limit, status } = params;
+    const offset = (page - 1) * limit;
+
+    if (!hasSupabase) {
+      let items = [...adminService.MOCK_FEEDBACK];
+      if (status) items = items.filter((f) => f.status === status);
+      return { items: items.slice(offset, offset + limit), total: items.length, page, limit };
+    }
+
+    let query = supabase
+      .from('feedback')
+      .select('*, users(name, email)', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (status) query = query.eq('status', status);
+
+    const { data, count, error } = await query;
+    if (error) throw new Error(error.message);
+    return { items: data ?? [], total: count ?? 0, page, limit };
+  },
+
+  async updateFeedbackStatus(id: string, status: 'aprovado' | 'rejeitado', adminId: string) {
+    if (!hasSupabase) {
+      const fb = adminService.MOCK_FEEDBACK.find((f) => f.id === id);
+      if (fb) fb.status = status;
+      return fb ?? { id, status };
+    }
+    const { data, error } = await supabase
+      .from('feedback')
+      .update({ status, moderated_by: adminId, moderated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
+  // ─── Reviews Summary ──────────────────────────────────────────────────────────
+
+  async getReviewsSummary() {
+    if (!hasSupabase) {
+      return {
+        averageRating: 4.8,
+        totalReviews: 127,
+        breakdown: { '5': 98, '4': 18, '3': 7, '2': 2, '1': 2 },
+        recentReviews: adminService.MOCK_FEEDBACK
+          .filter((f) => f.status === 'aprovado')
+          .map((f) => ({
+            id: f.id,
+            userName: f.user_name,
+            rating: f.rating,
+            comment: f.comment,
+            source: 'app' as const,
+            createdAt: f.created_at,
+          })),
+      };
+    }
+
+    const { data: reviews } = await supabase
+      .from('feedback')
+      .select('rating, comment, status, created_at, users(name)')
+      .eq('status', 'aprovado')
+      .order('created_at', { ascending: false });
+
+    const items = reviews ?? [];
+    const total = items.length;
+    const breakdown: Record<string, number> = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
+    let sum = 0;
+    for (const r of items) {
+      sum += r.rating;
+      breakdown[String(r.rating)] = (breakdown[String(r.rating)] ?? 0) + 1;
+    }
+    const averageRating = total > 0 ? Math.round((sum / total) * 10) / 10 : 0;
+
+    return {
+      averageRating,
+      totalReviews: total,
+      breakdown,
+      recentReviews: items.slice(0, 10).map((r: any) => ({
+        id: r.id ?? Math.random().toString(),
+        userName: r.users?.name ?? 'Cliente',
+        rating: r.rating,
+        comment: r.comment,
+        source: 'app' as const,
+        createdAt: r.created_at,
+      })),
+    };
+  },
 };

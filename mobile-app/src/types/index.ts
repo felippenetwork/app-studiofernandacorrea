@@ -6,6 +6,10 @@ export interface User {
   email: string;
   phone?: string;
   avatar?: string;
+  birthDate?: string | null;
+  acceptsMarketing: boolean;
+  acceptsPush: boolean;
+  isVip?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -212,6 +216,7 @@ export type ProfileStackParamList = {
   ProfileMain: undefined;
   Benefits: undefined;
   Notifications: undefined;
+  EditProfile: undefined;
 };
 
 // ─── API ─────────────────────────────────────────────────────────────────────
@@ -243,4 +248,15 @@ export interface RegisterData {
   email: string;
   phone: string;
   password: string;
+  birth_date?: string | null;
+  accepts_marketing: boolean;
+  accepts_push: boolean;
+}
+
+export interface UpdateProfileData {
+  name?: string;
+  phone?: string;
+  birth_date?: string | null;
+  accepts_marketing?: boolean;
+  accepts_push?: boolean;
 }

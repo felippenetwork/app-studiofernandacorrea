@@ -242,3 +242,39 @@ adminRouter.post('/push-campaigns', requireRole('owner', 'gerente', 'marketing')
     res.status(201).json({ data: await adminService.createPushCampaign(req.body, admin.id), message: 'Campanha criada.' });
   } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
+
+// POST /api/admin/push-campaigns/:id/send — send campaign now
+adminRouter.post('/push-campaigns/:id/send', requireRole('owner', 'gerente', 'marketing'), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await adminService.sendPushCampaign(req.params.id);
+    res.json({ data: result, message: `Campanha enviada para ${result.sent} dispositivos.` });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+});
+
+// ─── Feedback ─────────────────────────────────────────────────────────────────
+
+adminRouter.get('/feedback', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { status, page = '1', limit = '20' } = req.query as Record<string, string>;
+    res.json({ data: await adminService.listFeedback({ status, page: +page, limit: +limit }) });
+  } catch (err) { res.status(500).json({ error: 'InternalError', message: (err as Error).message }); }
+});
+
+adminRouter.patch('/feedback/:id/status', requireRole('owner', 'gerente', 'marketing'), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const admin = (req as any).adminUser;
+    const { status } = req.body as { status: 'aprovado' | 'rejeitado' };
+    if (!['aprovado', 'rejeitado'].includes(status)) {
+      res.status(400).json({ error: 'BadRequest', message: 'Status inválido.' });
+      return;
+    }
+    res.json({ data: await adminService.updateFeedbackStatus(req.params.id, status, admin.id), message: 'Status atualizado.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+});
+
+// ─── Reviews Summary ──────────────────────────────────────────────────────────
+
+adminRouter.get('/reviews/summary', async (_req: Request, res: Response): Promise<void> => {
+  try { res.json({ data: await adminService.getReviewsSummary() }); }
+  catch (err) { res.status(500).json({ error: 'InternalError', message: (err as Error).message }); }
+});

@@ -7,13 +7,14 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  Switch,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../../types';
 import { colors, textStyles, spacing } from '../../theme';
 import { Button, Input, Header } from '../../components/common';
 import { useAuthStore } from '../../store/authStore';
-import { MOCK_USER } from '../../mocks/data';
+import { authService } from '../../services/api/auth';
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Register'>;
@@ -24,23 +25,68 @@ export function RegisterScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [acceptsMarketing, setAcceptsMarketing] = useState(false);
+  const [acceptsPush, setAcceptsPush] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const { setUser } = useAuthStore();
 
+  const formatBirthDate = (text: string) => {
+    // Auto-format as DD/MM/YYYY
+    const digits = text.replace(/\D/g, '');
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
+  };
+
+  const parseBirthDate = (formatted: string): string | null => {
+    // Convert DD/MM/YYYY to YYYY-MM-DD
+    const parts = formatted.split('/');
+    if (parts.length !== 3 || parts[2].length !== 4) return null;
+    const [day, month, year] = parts;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  };
+
   const handleRegister = async () => {
     if (!name || !email || !phone || !password) {
-      setError('Preencha todos os campos.');
+      setError('Preencha nome, e-mail, celular e senha.');
       return;
     }
+    if (password.length < 8) {
+      setError('A senha deve ter no mínimo 8 caracteres.');
+      return;
+    }
+
+    let birth_date: string | null = null;
+    if (birthDate.length > 0) {
+      birth_date = parseBirthDate(birthDate);
+      if (!birth_date) {
+        setError('Data de nascimento inválida. Use DD/MM/AAAA.');
+        return;
+      }
+    }
+
     setError('');
     setLoading(true);
 
-    // Simulates API call — replace with real auth later
-    await new Promise((r) => setTimeout(r, 1200));
-    setUser({ ...MOCK_USER, name, email, phone }, { accessToken: 'mock-token', refreshToken: 'mock-refresh' });
-    setLoading(false);
+    try {
+      const result = await authService.register({
+        name,
+        email,
+        phone,
+        password,
+        birth_date,
+        accepts_marketing: acceptsMarketing,
+        accepts_push: acceptsPush,
+      });
+      setUser(result.user, result.tokens);
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? e?.message ?? 'Erro ao criar conta. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -61,7 +107,9 @@ export function RegisterScreen({ navigation }: Props) {
         />
 
         <View style={styles.body}>
-          <Text style={styles.subtitle}>Cadastre-se para agendar e acessar benefícios exclusivos.</Text>
+          <Text style={styles.subtitle}>
+            Cadastre-se para agendar e acessar benefícios exclusivos.
+          </Text>
 
           {error ? (
             <View style={styles.errorBanner}>
@@ -70,7 +118,7 @@ export function RegisterScreen({ navigation }: Props) {
           ) : null}
 
           <Input
-            label="Nome completo"
+            label="Nome completo *"
             placeholder="Como devemos te chamar?"
             value={name}
             onChangeText={setName}
@@ -79,7 +127,7 @@ export function RegisterScreen({ navigation }: Props) {
           />
 
           <Input
-            label="E-mail"
+            label="E-mail *"
             placeholder="seu@email.com"
             value={email}
             onChangeText={setEmail}
@@ -89,7 +137,7 @@ export function RegisterScreen({ navigation }: Props) {
           />
 
           <Input
-            label="Celular"
+            label="Celular *"
             placeholder="(11) 99999-0000"
             value={phone}
             onChangeText={setPhone}
@@ -98,7 +146,7 @@ export function RegisterScreen({ navigation }: Props) {
           />
 
           <Input
-            label="Senha"
+            label="Senha *"
             placeholder="Crie uma senha"
             value={password}
             onChangeText={setPassword}
@@ -106,6 +154,48 @@ export function RegisterScreen({ navigation }: Props) {
             leftIcon="lock-closed-outline"
             hint="Mínimo 8 caracteres"
           />
+
+          <Input
+            label="Data de nascimento"
+            placeholder="DD/MM/AAAA"
+            value={birthDate}
+            onChangeText={(t) => setBirthDate(formatBirthDate(t))}
+            keyboardType="numeric"
+            leftIcon="calendar-outline"
+            hint="Opcional — para receber cupom de aniversário"
+            maxLength={10}
+          />
+
+          {/* Consent toggles */}
+          <View style={styles.consentSection}>
+            <View style={styles.consentRow}>
+              <View style={styles.consentText}>
+                <Text style={styles.consentLabel}>Notificações push</Text>
+                <Text style={styles.consentSub}>Receba confirmações e lembretes de agendamentos</Text>
+              </View>
+              <Switch
+                value={acceptsPush}
+                onValueChange={setAcceptsPush}
+                trackColor={{ false: colors.border, true: colors.primaryLight }}
+                thumbColor={acceptsPush ? colors.primary : colors.textTertiary}
+              />
+            </View>
+
+            <View style={styles.separator} />
+
+            <View style={styles.consentRow}>
+              <View style={styles.consentText}>
+                <Text style={styles.consentLabel}>Promoções e novidades</Text>
+                <Text style={styles.consentSub}>Receba ofertas exclusivas e lançamentos</Text>
+              </View>
+              <Switch
+                value={acceptsMarketing}
+                onValueChange={setAcceptsMarketing}
+                trackColor={{ false: colors.border, true: colors.primaryLight }}
+                thumbColor={acceptsMarketing ? colors.primary : colors.textTertiary}
+              />
+            </View>
+          </View>
 
           <Button
             label="Criar conta"
@@ -159,6 +249,38 @@ const styles = StyleSheet.create({
   errorText: {
     ...textStyles.bodySmall,
     color: colors.error,
+  },
+  consentSection: {
+    backgroundColor: colors.backgroundCard,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginTop: spacing[2],
+    marginBottom: spacing[4],
+    overflow: 'hidden',
+  },
+  consentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing[4],
+    gap: spacing[3],
+  },
+  consentText: {
+    flex: 1,
+  },
+  consentLabel: {
+    ...textStyles.bodyMedium,
+    color: colors.textPrimary,
+  },
+  consentSub: {
+    ...textStyles.caption,
+    color: colors.textTertiary,
+    marginTop: 2,
+  },
+  separator: {
+    height: 1,
+    backgroundColor: colors.divider,
+    marginHorizontal: spacing[4],
   },
   btn: {
     marginTop: spacing[2],

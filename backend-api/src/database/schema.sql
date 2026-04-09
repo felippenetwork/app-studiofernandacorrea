@@ -390,3 +390,30 @@ CREATE TRIGGER update_admin_users_updated_at     BEFORE UPDATE ON admin_users   
 CREATE TRIGGER update_app_settings_updated_at    BEFORE UPDATE ON app_settings    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_birthday_settings_updated_at BEFORE UPDATE ON birthday_settings FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_push_campaigns_updated_at  BEFORE UPDATE ON push_campaigns  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ─── Feedback ────────────────────────────────────────────────────────────────
+
+CREATE TYPE feedback_status AS ENUM ('pendente', 'aprovado', 'rejeitado');
+
+CREATE TABLE IF NOT EXISTS feedback (
+  id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id           UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  appointment_id    UUID REFERENCES appointments(id) ON DELETE SET NULL,
+  rating            SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  comment           TEXT NOT NULL,
+  professional_id   UUID REFERENCES professionals(id) ON DELETE SET NULL,
+  service_id        UUID REFERENCES services(id) ON DELETE SET NULL,
+  status            feedback_status NOT NULL DEFAULT 'pendente',
+  moderated_by      UUID REFERENCES admin_users(id) ON DELETE SET NULL,
+  moderated_at      TIMESTAMPTZ,
+  google_review_url VARCHAR(500),
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(user_id, appointment_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status);
+CREATE INDEX IF NOT EXISTS idx_feedback_user_id ON feedback(user_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at DESC);
+
+CREATE TRIGGER update_feedback_updated_at BEFORE UPDATE ON feedback FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

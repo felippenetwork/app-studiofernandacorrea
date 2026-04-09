@@ -9,6 +9,12 @@ export interface DbUser {
   phone: string | null;
   avatar_url: string | null;
   password_hash: string;
+  birth_date: string | null;
+  accepts_marketing: boolean;
+  accepts_push: boolean;
+  is_vip: boolean;
+  is_blocked: boolean;
+  internal_notes: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

@@ -18,6 +18,8 @@ import { adminAuthRouter } from './modules/admin-auth/admin-auth.router';
 import { adminRouter } from './modules/admin/admin.router';
 import { adminNotificationsRouter } from './modules/admin-notifications/admin-notifications.router';
 import { birthdayRouter } from './modules/birthday/birthday.router';
+import { startCronJobs } from './scheduler';
+import { adminService } from './modules/admin/admin.service';
 
 const app = express();
 
@@ -86,6 +88,22 @@ app.use('/api/coupons',       couponsRouter);
 app.use('/api/benefits',      benefitsRouter);
 app.use('/api/payments',      paymentsRouter);
 app.use('/api/notifications', notificationsRouter);
+
+// ─── Public config (no auth) ──────────────────────────────────────────────────
+// Returns only safe, non-sensitive public settings for the mobile app
+app.get('/api/config/public', async (_req, res) => {
+  try {
+    const integrations = await adminService.getSetting('integrations');
+    res.json({
+      data: {
+        googleReviewLink: integrations?.googleReviewLink ?? null,
+      },
+    });
+  } catch {
+    res.json({ data: { googleReviewLink: null } });
+  }
+});
+
 // Admin routes
 app.use('/api/admin/auth',          adminAuthRouter);
 app.use('/api/admin/notifications', adminNotificationsRouter);
@@ -107,6 +125,7 @@ app.listen(env.PORT, () => {
   console.log(`   Supabase    : ${hasSupabase ? '✓ connected' : '✗ mock mode'}`);
   console.log(`   Trinks      : ${hasTrinks ? '✓ connected' : '✗ mock mode'}`);
   console.log(`   Mercado Pago: ${hasMercadoPago ? '✓ connected' : '✗ simulation'}`);
+  startCronJobs();
   if (isDev) console.log(`   Docs        : http://localhost:${env.PORT}/health\n`);
 });
 

@@ -6,16 +6,19 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useQuery } from '@tanstack/react-query';
 import { ProfileStackParamList } from '../../types';
 import { colors, textStyles, spacing, borderRadius, shadows } from '../../theme';
 import { Avatar, Card, Divider } from '../../components/common';
 import { useAuthStore } from '../../store/authStore';
 import { MOCK_APPOINTMENTS } from '../../mocks/data';
+import { settingsService } from '../../services/api/settings';
 
 type Nav = NativeStackNavigationProp<ProfileStackParamList, 'ProfileMain'>;
 
@@ -33,6 +36,30 @@ export function ProfileScreen() {
   const { user, logout } = useAuthStore();
 
   const completedCount = MOCK_APPOINTMENTS.filter((a) => a.status === 'concluido').length;
+
+  const { data: config } = useQuery({
+    queryKey: ['public-config'],
+    queryFn: settingsService.getPublicConfig,
+    staleTime: 1000 * 60 * 10, // 10 min
+  });
+
+  const handleGoogleReview = async () => {
+    const url = config?.googleReviewLink;
+    if (!url) {
+      Alert.alert('Indisponível', 'Link de avaliação não configurado ainda.');
+      return;
+    }
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Erro', 'Não foi possível abrir o link.');
+      }
+    } catch {
+      Alert.alert('Erro', 'Não foi possível abrir o link.');
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert('Sair', 'Deseja realmente sair da sua conta?', [
@@ -67,6 +94,12 @@ export function ProfileScreen() {
     {
       title: 'Preferências',
       items: [
+        {
+          icon: 'star-outline' as keyof typeof Ionicons.glyphMap,
+          label: 'Avaliar no Google',
+          sublabel: 'Compartilhe sua experiência',
+          onPress: handleGoogleReview,
+        },
         {
           icon: 'lock-closed-outline',
           label: 'Alterar senha',
@@ -108,6 +141,14 @@ export function ProfileScreen() {
         <Text style={styles.name}>{user?.name}</Text>
         <Text style={styles.email}>{user?.email}</Text>
         {user?.phone && <Text style={styles.phone}>{user.phone}</Text>}
+        <TouchableOpacity
+          onPress={() => navigation.navigate('EditProfile')}
+          style={styles.editBtn}
+          activeOpacity={0.75}
+        >
+          <Ionicons name="pencil-outline" size={14} color={colors.primary} />
+          <Text style={styles.editBtnText}>Editar perfil</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Stats */}
@@ -275,6 +316,23 @@ const styles = StyleSheet.create({
     ...textStyles.caption,
     color: colors.textTertiary,
     marginTop: 2,
+  },
+  editBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: spacing[2],
+    paddingVertical: 4,
+    paddingHorizontal: spacing[3],
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.primaryLight,
+    backgroundColor: colors.primaryGhost,
+  },
+  editBtnText: {
+    ...textStyles.labelSmall,
+    color: colors.primary,
+    fontSize: 12,
   },
   version: {
     ...textStyles.caption,

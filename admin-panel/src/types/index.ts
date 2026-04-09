@@ -223,6 +223,38 @@ export interface AuditLog {
   createdAt: string;
 }
 
+// ─── Feedback ────────────────────────────────────────────────────────────────
+
+export interface Feedback {
+  id: string;
+  userName: string;
+  userEmail?: string;
+  rating: number;
+  comment: string;
+  professionalName?: string;
+  serviceName?: string;
+  status: 'pendente' | 'aprovado' | 'rejeitado';
+  createdAt: string;
+}
+
+// ─── Reviews ─────────────────────────────────────────────────────────────────
+
+export interface ReviewItem {
+  id: string;
+  userName: string;
+  rating: number;
+  comment: string;
+  source: 'app' | 'google';
+  createdAt: string;
+}
+
+export interface ReviewSummary {
+  averageRating: number;
+  totalReviews: number;
+  breakdown: Record<string, number>;
+  recentReviews: ReviewItem[];
+}
+
 // ─── Paginated response ──────────────────────────────────────────────────────
 
 export interface Paginated<T> {

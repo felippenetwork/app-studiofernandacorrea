@@ -14,6 +14,10 @@ export const MOCK_USER: User = {
   email: 'fernanda@email.com',
   phone: '(11) 99999-0000',
   avatar: undefined,
+  birthDate: '1995-04-09',
+  acceptsMarketing: true,
+  acceptsPush: true,
+  isVip: false,
   createdAt: '2024-01-15T10:00:00Z',
   updatedAt: '2024-01-15T10:00:00Z',
 };

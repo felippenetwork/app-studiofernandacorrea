@@ -5,6 +5,9 @@ export const registerSchema = z.object({
   email: z.string().email('E-mail inválido').toLowerCase(),
   phone: z.string().min(10, 'Telefone inválido').optional(),
   password: z.string().min(8, 'Senha deve ter no mínimo 8 caracteres'),
+  birth_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida (use YYYY-MM-DD)').optional().nullable(),
+  accepts_marketing: z.boolean().default(false),
+  accepts_push: z.boolean().default(true),
 });
 
 export const loginSchema = z.object({

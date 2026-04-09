@@ -7,6 +7,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,11 +33,12 @@ export function CouponDetailsScreen() {
     staleTime: 1000 * 60 * 5,
   });
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (!coupon) return;
+    await Clipboard.setStringAsync(coupon.code);
     Alert.alert(
       'Código copiado!',
-      `O código "${coupon.code}" foi copiado. Use-o ao selecionar um serviço no agendamento.`,
+      `O código "${coupon.code}" foi copiado para a área de transferência. Use-o ao selecionar um serviço no agendamento.`,
       [{ text: 'Entendido' }]
     );
   };
