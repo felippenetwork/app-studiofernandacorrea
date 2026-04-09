@@ -66,9 +66,12 @@ export default function ProfessionalsPage() {
 
   const onSubmit = (data: ProfForm) => {
     setError(null);
+    const { specialtiesRaw, avatarUrl, trinksEmployeeId, ...rest } = data;
     const payload = {
-      ...data,
-      specialties: (data.specialtiesRaw ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+      ...rest,
+      specialties: (specialtiesRaw ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+      ...(avatarUrl ? { avatarUrl } : {}),
+      ...(trinksEmployeeId ? { trinksEmployeeId } : {}),
     };
     if (editing) {
       updateMutation.mutate({ id: editing.id, data: payload });
