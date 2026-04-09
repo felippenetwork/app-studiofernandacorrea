@@ -23,7 +23,7 @@ export function startCronJobs(): void {
       console.log('[cron] Birthday automation started —', new Date().toISOString());
       try {
         const result = await birthdayService.runBirthdayAutomation();
-        console.log(`[cron] Birthday automation complete: ${result.processed} processed, ${result.sent} sent, ${result.skipped} skipped.`);
+        console.log(`[cron] Birthday automation complete: ${result.processed} processed, ${result.skipped} skipped.`);
       } catch (err) {
         console.error('[cron] Birthday automation error:', (err as Error).message);
       }
