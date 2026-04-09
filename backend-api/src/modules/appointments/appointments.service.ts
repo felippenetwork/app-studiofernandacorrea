@@ -1,6 +1,7 @@
 import { appointmentsRepository } from './appointments.repository';
 import { trinksService } from '../trinks/trinks.service';
 import { pushService } from '../../services/push.service';
+import { adminNotificationsService } from '../admin-notifications/admin-notifications.service';
 import { CreateAppointmentInput, BOOKING_FEE, DbAppointment } from '../../types';
 import { hasSupabase } from '../../config/env';
 import { MOCK_APPOINTMENTS } from './appointments.mock';
@@ -53,6 +54,14 @@ export const appointmentsService = {
       } as unknown as DbAppointment;
       mockCreated.push(mock);
       console.log(`[appointments] Mock appointment created: ${mock.id}`);
+      // Notify admin
+      adminNotificationsService.create({
+        type: 'new_appointment',
+        title: 'Novo agendamento',
+        message: `Agendamento criado para ${mock.appointment_date} às ${mock.appointment_time}.`,
+        entityType: 'appointment',
+        entityId: mock.id,
+      }).catch(() => {});
       return mock;
     }
 
@@ -73,6 +82,15 @@ export const appointmentsService = {
     };
 
     const appointment = await appointmentsRepository.create(payload);
+
+    // Notify admin (non-blocking)
+    adminNotificationsService.create({
+      type: 'new_appointment',
+      title: 'Novo agendamento',
+      message: `Agendamento criado para ${input.appointmentDate} às ${input.appointmentTime}.`,
+      entityType: 'appointment',
+      entityId: appointment.id,
+    }).catch(() => {});
 
     // Sync to Trinks (non-blocking)
     trinksService.createAppointment({

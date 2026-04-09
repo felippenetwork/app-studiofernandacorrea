@@ -237,6 +237,137 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE INDEX idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX idx_notifications_read ON notifications(is_read);
 
+-- ─── Users — additional profile fields ───────────────────────────────────────
+
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS birth_date       DATE,
+  ADD COLUMN IF NOT EXISTS accepts_marketing BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS accepts_push      BOOLEAN NOT NULL DEFAULT TRUE,
+  ADD COLUMN IF NOT EXISTS is_vip            BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS is_blocked        BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS internal_notes    TEXT;
+
+-- ─── Admin Users ─────────────────────────────────────────────────────────────
+
+CREATE TYPE admin_role AS ENUM ('owner', 'gerente', 'recepcao', 'marketing', 'financeiro');
+
+CREATE TABLE IF NOT EXISTS admin_users (
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name          VARCHAR(255) NOT NULL,
+  email         VARCHAR(255) NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  role          admin_role NOT NULL DEFAULT 'recepcao',
+  is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+  last_login_at TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_admin_users_email ON admin_users(email);
+
+-- ─── Admin Notifications ──────────────────────────────────────────────────────
+
+CREATE TYPE admin_notification_type AS ENUM (
+  'new_appointment',
+  'appointment_cancelled',
+  'payment_approved',
+  'payment_pending',
+  'new_feedback',
+  'new_customer',
+  'no_show'
+);
+
+CREATE TABLE IF NOT EXISTS admin_notifications (
+  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  type         admin_notification_type NOT NULL,
+  title        VARCHAR(255) NOT NULL,
+  message      TEXT NOT NULL,
+  entity_type  VARCHAR(50),
+  entity_id    UUID,
+  is_read      BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_admin_notifications_read ON admin_notifications(is_read);
+CREATE INDEX idx_admin_notifications_created ON admin_notifications(created_at DESC);
+
+-- ─── Audit Logs ──────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  admin_user_id  UUID REFERENCES admin_users(id) ON DELETE SET NULL,
+  admin_email    VARCHAR(255),
+  action         VARCHAR(100) NOT NULL,
+  entity_type    VARCHAR(50),
+  entity_id      UUID,
+  changes        JSONB,
+  ip_address     VARCHAR(45),
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_audit_logs_admin_user ON audit_logs(admin_user_id);
+CREATE INDEX idx_audit_logs_created ON audit_logs(created_at DESC);
+
+-- ─── App Settings (branding, schedule config, integrations) ─────────────────
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  key           VARCHAR(100) NOT NULL UNIQUE,
+  value         JSONB NOT NULL,
+  updated_by    UUID REFERENCES admin_users(id) ON DELETE SET NULL,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ─── Birthday Automation Settings ────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS birthday_settings (
+  id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  is_active           BOOLEAN NOT NULL DEFAULT FALSE,
+  coupon_type         discount_type NOT NULL DEFAULT 'fixed',
+  coupon_value        NUMERIC(10,2) NOT NULL DEFAULT 20.00,
+  coupon_validity_days INT NOT NULL DEFAULT 30,
+  push_message        TEXT NOT NULL DEFAULT 'Feliz aniversário! Temos um presente especial para você.',
+  send_hour           INT NOT NULL DEFAULT 8,
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Seed default birthday settings
+INSERT INTO birthday_settings (is_active, coupon_type, coupon_value, coupon_validity_days, send_hour)
+VALUES (false, 'fixed', 20.00, 30, 8)
+ON CONFLICT DO NOTHING;
+
+-- ─── Birthday Logs ────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS birthday_logs (
+  id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  coupon_id  UUID REFERENCES coupons(id),
+  year       INT NOT NULL,
+  sent_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(user_id, year)
+);
+
+CREATE INDEX idx_birthday_logs_user ON birthday_logs(user_id);
+
+-- ─── Push Campaigns ──────────────────────────────────────────────────────────
+
+CREATE TYPE campaign_status AS ENUM ('rascunho', 'agendada', 'enviada', 'cancelada');
+CREATE TYPE campaign_segment AS ENUM ('todos', 'vip', 'ativos', 'inativos');
+
+CREATE TABLE IF NOT EXISTS push_campaigns (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  title       VARCHAR(255) NOT NULL,
+  body        TEXT NOT NULL,
+  segment     campaign_segment NOT NULL DEFAULT 'todos',
+  status      campaign_status NOT NULL DEFAULT 'rascunho',
+  scheduled_at TIMESTAMPTZ,
+  sent_at     TIMESTAMPTZ,
+  sent_count  INT NOT NULL DEFAULT 0,
+  created_by  UUID REFERENCES admin_users(id) ON DELETE SET NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- ─── Updated-at trigger ──────────────────────────────────────────────────────
 
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -255,3 +386,7 @@ CREATE TRIGGER update_payments_updated_at        BEFORE UPDATE ON payments      
 CREATE TRIGGER update_coupons_updated_at         BEFORE UPDATE ON coupons         FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_benefits_updated_at        BEFORE UPDATE ON benefits        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_push_tokens_updated_at     BEFORE UPDATE ON push_tokens     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_admin_users_updated_at     BEFORE UPDATE ON admin_users     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_app_settings_updated_at    BEFORE UPDATE ON app_settings    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_birthday_settings_updated_at BEFORE UPDATE ON birthday_settings FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_push_campaigns_updated_at  BEFORE UPDATE ON push_campaigns  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

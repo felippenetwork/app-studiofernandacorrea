@@ -13,6 +13,11 @@ import { benefitsRouter } from './modules/benefits/benefits.router';
 import { paymentsRouter } from './modules/payments/payments.router';
 import { notificationsRouter } from './modules/notifications/notifications.router';
 import { trinksRouter } from './modules/trinks/trinks.router';
+// Admin
+import { adminAuthRouter } from './modules/admin-auth/admin-auth.router';
+import { adminRouter } from './modules/admin/admin.router';
+import { adminNotificationsRouter } from './modules/admin-notifications/admin-notifications.router';
+import { birthdayRouter } from './modules/birthday/birthday.router';
 
 const app = express();
 
@@ -61,7 +66,7 @@ app.use('/api/auth', authLimiter);
 app.get('/health', (_req, res) =>
   res.json({
     status: 'ok',
-    version: '4.0.0',
+    version: '5.0.0',
     timestamp: new Date().toISOString(),
     env: env.NODE_ENV,
     integrations: {
@@ -81,6 +86,11 @@ app.use('/api/coupons',       couponsRouter);
 app.use('/api/benefits',      benefitsRouter);
 app.use('/api/payments',      paymentsRouter);
 app.use('/api/notifications', notificationsRouter);
+// Admin routes
+app.use('/api/admin/auth',          adminAuthRouter);
+app.use('/api/admin/notifications', adminNotificationsRouter);
+app.use('/api/admin/birthday',      birthdayRouter);
+app.use('/api/admin',               adminRouter);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 app.use((_req, res) => {
