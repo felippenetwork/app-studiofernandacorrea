@@ -21,7 +21,14 @@ const envSchema = z.object({
 
   // Mercado Pago
   MP_ACCESS_TOKEN: z.string().optional(),
+  MP_PUBLIC_KEY: z.string().optional(),
   MP_WEBHOOK_SECRET: z.string().optional(),
+
+  // Backend public URL (used as webhook notification_url for MP)
+  API_BASE_URL: z.string().url().optional(),
+
+  // Trinks webhook signature verification
+  TRINKS_WEBHOOK_SECRET: z.string().optional(),
 
   // CORS
   ALLOWED_ORIGINS: z.string().default('http://localhost:19000,exp://localhost:19000'),
@@ -53,7 +60,10 @@ export const env = parsed.success
       TRINKS_API_KEY: undefined,
       TRINKS_COMPANY_ID: undefined,
       MP_ACCESS_TOKEN: undefined,
+      MP_PUBLIC_KEY: undefined,
       MP_WEBHOOK_SECRET: undefined,
+      API_BASE_URL: undefined,
+      TRINKS_WEBHOOK_SECRET: undefined,
       ALLOWED_ORIGINS: 'http://localhost:19000,exp://localhost:19000',
     };
 

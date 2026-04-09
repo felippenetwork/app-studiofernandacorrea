@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Alert,
+  Clipboard,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,7 +17,7 @@ import { BookingStackParamList, PaymentMethod } from '../../types';
 import { colors, textStyles, spacing, borderRadius, shadows } from '../../theme';
 import { Header, Button, Card, Divider } from '../../components/common';
 import { useBookingStore } from '../../store/bookingStore';
-import { appointmentsService } from '../../services/api/appointments';
+import { appointmentsService, CreateAppointmentResult } from '../../services/api/appointments';
 import { formatCurrency } from '../../utils/formatters';
 import { BOOKING_FEE } from '../../mocks/data';
 
@@ -33,6 +35,8 @@ export function PaymentScreen() {
   const { selectedService, selectedProfessional, selectedDate, selectedTime, selectedCoupon, resetBooking } =
     useBookingStore();
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
+  const [pixResult, setPixResult] = useState<{ qrCode?: string; copyPaste?: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const { mutate: confirmPayment, isPending: loading } = useMutation({
     mutationFn: () =>
@@ -40,22 +44,28 @@ export function PaymentScreen() {
         booking: { selectedService, selectedProfessional, selectedDate, selectedTime, selectedCoupon },
         paymentMethod: selectedMethod!,
       }),
-    onSuccess: () => {
-      // Invalidate appointments cache so MyAppointments refreshes
+    onSuccess: (result: CreateAppointmentResult) => {
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
-      Alert.alert(
-        '✓ Agendamento Confirmado',
-        `${selectedService?.name} confirmado para ${selectedDate} às ${selectedTime}.\n\nTaxa de reserva de ${formatCurrency(BOOKING_FEE)} processada com sucesso.`,
-        [
-          {
-            text: 'Ver meus agendamentos',
-            onPress: () => {
-              resetBooking();
-              navigation.getParent()?.navigate('MyAppointments');
+
+      if (result.pixQrCode || result.pixCopyPaste) {
+        // PIX flow: show inline QR code screen
+        setPixResult({ qrCode: result.pixQrCode, copyPaste: result.pixCopyPaste });
+      } else {
+        // Card/instant approval
+        Alert.alert(
+          '✓ Agendamento Confirmado',
+          `${selectedService?.name} confirmado para ${selectedDate} às ${selectedTime}.\n\nTaxa de reserva de ${formatCurrency(BOOKING_FEE)} processada com sucesso.`,
+          [
+            {
+              text: 'Ver meus agendamentos',
+              onPress: () => {
+                resetBooking();
+                navigation.getParent()?.navigate('MyAppointments');
+              },
             },
-          },
-        ]
-      );
+          ]
+        );
+      }
     },
     onError: (error: Error) => {
       Alert.alert(
@@ -74,7 +84,114 @@ export function PaymentScreen() {
     confirmPayment();
   };
 
+  const handleCopyPaste = () => {
+    if (!pixResult?.copyPaste) return;
+    Clipboard.setString(pixResult.copyPaste);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 3000);
+  };
+
+  const handlePixDone = () => {
+    resetBooking();
+    navigation.getParent()?.navigate('MyAppointments');
+  };
+
   if (!selectedService) return null;
+
+  // ─── PIX QR Code Screen ───────────────────────────────────────────────────
+
+  if (pixResult) {
+    return (
+      <View style={styles.container}>
+        <Header title="Pagamento via Pix" subtitle="Escaneie o QR code" showBack={false} />
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <Card style={styles.pixCard} shadow="md">
+            <View style={styles.pixHeader}>
+              <Ionicons name="checkmark-circle-outline" size={28} color={colors.success} />
+              <Text style={styles.pixTitle}>Agendamento criado!</Text>
+              <Text style={styles.pixSubtitle}>
+                Aguardando pagamento da taxa de reserva de{' '}
+                <Text style={{ fontWeight: '700' }}>{formatCurrency(BOOKING_FEE)}</Text>
+              </Text>
+            </View>
+
+            <Divider style={styles.divider} />
+
+            {/* QR Code image */}
+            {pixResult.qrCode ? (
+              <Image
+                source={{ uri: `data:image/png;base64,${pixResult.qrCode}` }}
+                style={styles.qrImage}
+                resizeMode="contain"
+                accessibilityLabel="QR Code Pix"
+              />
+            ) : (
+              <View style={styles.qrPlaceholder}>
+                <Ionicons name="qr-code-outline" size={80} color={colors.border} />
+                <Text style={styles.qrPlaceholderText}>QR Code não disponível em modo mock</Text>
+              </View>
+            )}
+
+            {/* Copy-paste code */}
+            {pixResult.copyPaste && (
+              <View style={styles.copySection}>
+                <Text style={styles.copyLabel}>Pix Copia e Cola</Text>
+                <View style={styles.copyBox}>
+                  <Text style={styles.copyCode} numberOfLines={2} ellipsizeMode="middle">
+                    {pixResult.copyPaste}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={handleCopyPaste}
+                    style={[styles.copyButton, copied && styles.copyButtonDone]}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons
+                      name={copied ? 'checkmark-outline' : 'copy-outline'}
+                      size={18}
+                      color={copied ? colors.success : colors.primary}
+                    />
+                    <Text style={[styles.copyButtonText, copied && styles.copyButtonTextDone]}>
+                      {copied ? 'Copiado!' : 'Copiar'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </Card>
+
+          {/* Instructions */}
+          <View style={styles.pixInstructions}>
+            {[
+              'Abra o app do seu banco',
+              'Escolha pagar via Pix e escaneie o QR code ou use o código acima',
+              'Confirme o pagamento de ' + formatCurrency(BOOKING_FEE),
+              'Seu agendamento será confirmado automaticamente',
+            ].map((step, i) => (
+              <View key={i} style={styles.stepRow}>
+                <View style={styles.stepBadge}>
+                  <Text style={styles.stepNumber}>{i + 1}</Text>
+                </View>
+                <Text style={styles.stepText}>{step}</Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.mpBadge}>
+            <Ionicons name="shield-checkmark-outline" size={14} color={colors.success} />
+            <Text style={styles.mpText}>Pagamento seguro via Mercado Pago</Text>
+          </View>
+
+          <Button
+            label="Ir para meus agendamentos"
+            onPress={handlePixDone}
+            style={styles.cta}
+          />
+        </ScrollView>
+      </View>
+    );
+  }
+
+  // ─── Payment Selection Screen ─────────────────────────────────────────────
 
   return (
     <View style={styles.container}>
@@ -162,6 +279,8 @@ export function PaymentScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { paddingHorizontal: spacing[5], paddingBottom: spacing[8] },
+
+  // Amount card
   amountCard: { alignItems: 'center', marginBottom: spacing[6], paddingVertical: spacing[6] },
   amountLabel: {
     ...textStyles.labelMedium,
@@ -184,6 +303,8 @@ const styles = StyleSheet.create({
   },
   couponLabel: { ...textStyles.bodySmall, color: colors.success },
   couponValue: { ...textStyles.labelMedium, color: colors.success },
+
+  // Method selection
   sectionTitle: { ...textStyles.h3, color: colors.textPrimary, marginBottom: spacing[3] },
   methodCard: {
     flexDirection: 'row',
@@ -211,6 +332,8 @@ const styles = StyleSheet.create({
   radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   radioSelected: { borderColor: colors.primary },
   radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary },
+
+  // PIX notice (before payment)
   pixNotice: {
     flexDirection: 'row', alignItems: 'flex-start', gap: spacing[2],
     backgroundColor: colors.infoLight,
@@ -219,7 +342,62 @@ const styles = StyleSheet.create({
     marginBottom: spacing[4],
   },
   pixNoticeText: { ...textStyles.bodySmall, color: colors.info, flex: 1, lineHeight: 18 },
+
+  // MP badge + CTA
   mpBadge: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], marginBottom: spacing[5] },
   mpText: { ...textStyles.caption, color: colors.textTertiary },
   cta: { marginTop: spacing[2] },
+
+  // PIX QR Code result screen
+  pixCard: { alignItems: 'center', marginBottom: spacing[5], paddingVertical: spacing[5] },
+  pixHeader: { alignItems: 'center', gap: spacing[2], marginBottom: spacing[4] },
+  pixTitle: { ...textStyles.h2, color: colors.textPrimary },
+  pixSubtitle: { ...textStyles.bodyMedium, color: colors.textSecondary, textAlign: 'center' },
+  qrImage: { width: 200, height: 200, marginBottom: spacing[4] },
+  qrPlaceholder: {
+    width: 200, height: 200,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.backgroundCard,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing[4],
+    gap: spacing[2],
+  },
+  qrPlaceholderText: { ...textStyles.caption, color: colors.textTertiary, textAlign: 'center', paddingHorizontal: spacing[4] },
+  copySection: { width: '100%' },
+  copyLabel: { ...textStyles.labelMedium, color: colors.textSecondary, marginBottom: spacing[2] },
+  copyBox: {
+    backgroundColor: colors.backgroundCard,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing[3],
+    gap: spacing[2],
+  },
+  copyCode: { ...textStyles.bodySmall, color: colors.textPrimary, fontFamily: 'monospace' },
+  copyButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: spacing[2],
+    backgroundColor: colors.primaryGhost,
+    borderRadius: borderRadius.sm,
+    paddingVertical: spacing[2],
+    paddingHorizontal: spacing[3],
+    alignSelf: 'flex-start',
+  },
+  copyButtonDone: { backgroundColor: colors.successLight },
+  copyButtonText: { ...textStyles.labelMedium, color: colors.primary },
+  copyButtonTextDone: { color: colors.success },
+
+  // Step instructions
+  pixInstructions: { gap: spacing[3], marginBottom: spacing[5] },
+  stepRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing[3] },
+  stepBadge: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  },
+  stepNumber: { ...textStyles.labelMedium, color: colors.textOnPrimary },
+  stepText: { ...textStyles.bodySmall, color: colors.textSecondary, flex: 1, lineHeight: 20, paddingTop: 4 },
 });

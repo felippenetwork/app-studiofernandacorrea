@@ -213,6 +213,30 @@ CREATE TABLE IF NOT EXISTS trinks_webhook_events (
   received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- ─── In-app Notifications ────────────────────────────────────────────────────
+
+CREATE TYPE notification_type AS ENUM (
+  'agendamento_confirmado',
+  'lembrete_horario',
+  'agendamento_cancelado',
+  'novo_cupom',
+  'geral'
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type       notification_type NOT NULL DEFAULT 'geral',
+  title      VARCHAR(255) NOT NULL,
+  body       TEXT NOT NULL,
+  data       JSONB,
+  is_read    BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX idx_notifications_read ON notifications(is_read);
+
 -- ─── Updated-at trigger ──────────────────────────────────────────────────────
 
 CREATE OR REPLACE FUNCTION update_updated_at_column()

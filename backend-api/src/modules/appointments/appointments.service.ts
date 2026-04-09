@@ -1,5 +1,6 @@
 import { appointmentsRepository } from './appointments.repository';
 import { trinksService } from '../trinks/trinks.service';
+import { pushService } from '../../services/push.service';
 import { CreateAppointmentInput, BOOKING_FEE, DbAppointment } from '../../types';
 import { hasSupabase } from '../../config/env';
 import { MOCK_APPOINTMENTS } from './appointments.mock';
@@ -115,6 +116,11 @@ export const appointmentsService = {
         console.warn('[appointments] Trinks cancel sync failed:', err.message);
       });
     }
+
+    // Push notification (non-blocking)
+    pushService.appointmentCancelled(userId, 'seu agendamento').catch((err: Error) => {
+      console.warn('[appointments] Push cancel notification failed:', err.message);
+    });
 
     return updated;
   },

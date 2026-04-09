@@ -7,6 +7,16 @@ export interface CreateAppointmentPayload {
   paymentMethod: PaymentMethod;
 }
 
+export interface CreateAppointmentResult {
+  appointment: Appointment;
+  /** Base64 PIX QR code image (only for pix method) */
+  pixQrCode?: string;
+  /** PIX copy-paste code string (only for pix method) */
+  pixCopyPaste?: string;
+  /** Redirect URL for Checkout Pro card flow */
+  redirectUrl?: string;
+}
+
 // ─── Mapper: DB (snake_case) → Mobile (camelCase) ────────────────────────────
 
 function mapService(s: any): Service {
@@ -84,11 +94,11 @@ export const appointmentsService = {
     return mapAppointment(data.data);
   },
 
-  async createAppointment(payload: CreateAppointmentPayload): Promise<Appointment> {
+  async createAppointment(payload: CreateAppointmentPayload): Promise<CreateAppointmentResult> {
     if (USE_MOCK) {
       await new Promise((r) => setTimeout(r, 1800));
-      const { booking } = payload;
-      return {
+      const { booking, paymentMethod } = payload;
+      const appointment: Appointment = {
         id: `apt-${Date.now()}`,
         userId: 'user-1',
         service: booking.selectedService!,
@@ -99,11 +109,19 @@ export const appointmentsService = {
         servicePrice: booking.selectedService!.price,
         bookingFee: BOOKING_FEE,
         remainingAmount: booking.selectedService!.price - BOOKING_FEE,
-        paymentStatus: 'aprovado',
+        paymentStatus: paymentMethod === 'pix' ? 'pendente' : 'aprovado',
         paymentId: `pay-${Date.now()}`,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
+      if (paymentMethod === 'pix') {
+        return {
+          appointment,
+          pixQrCode: undefined, // no real QR in mock
+          pixCopyPaste: '00020126580014BR.GOV.BCB.PIX013636b5a5e9-1234-mock-pix-copy-paste-code5204000053039865802BR5925Studio Fernanda Correa6009SAO PAULO62070503***6304ABCD',
+        };
+      }
+      return { appointment };
     }
 
     // 1. Create appointment record
@@ -117,12 +135,24 @@ export const appointmentsService = {
     const appointment = mapAppointment(apptData.data);
 
     // 2. Pay the R$40 booking fee
-    await apiClient.post('/payments/booking-fee', {
+    const { data: payData } = await apiClient.post('/payments/booking-fee', {
       appointmentId: appointment.id,
       method: payload.paymentMethod,
     });
 
-    return { ...appointment, status: 'confirmado', paymentStatus: 'aprovado' };
+    const result: CreateAppointmentResult = {
+      appointment: { ...appointment, paymentStatus: 'pendente' },
+    };
+
+    // Extract PIX or card redirect data from payment response
+    if (payData?.data) {
+      const pd = payData.data as any;
+      if (pd.pixQrCode)    result.pixQrCode    = pd.pixQrCode;
+      if (pd.pixCopyPaste) result.pixCopyPaste = pd.pixCopyPaste;
+      if (pd.redirectUrl)  result.redirectUrl  = pd.redirectUrl;
+    }
+
+    return result;
   },
 
   async cancelAppointment(appointmentId: string): Promise<void> {
