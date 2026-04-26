@@ -44,15 +44,22 @@ export const adminService = {
 
     const today = new Date().toISOString().slice(0, 10);
     const monthStart = today.slice(0, 7) + '-01';
+    const todayMMDD = today.slice(5); // MM-DD
 
-    const [apptToday, apptMonth, pendingPay, approvedPay, coupons, customers] = await Promise.all([
+    const [apptToday, apptMonth, pendingPay, approvedPay, coupons, customers, newCustomers, revenueRows, upcomingRows, birthdayRows] = await Promise.all([
       supabase.from('appointments').select('*', { count: 'exact', head: true }).eq('appointment_date', today),
       supabase.from('appointments').select('*', { count: 'exact', head: true }).gte('appointment_date', monthStart),
       supabase.from('payments').select('*', { count: 'exact', head: true }).eq('status', 'pendente'),
       supabase.from('payments').select('*', { count: 'exact', head: true }).eq('status', 'aprovado'),
       supabase.from('coupons').select('*', { count: 'exact', head: true }).eq('status', 'ativo'),
       supabase.from('users').select('*', { count: 'exact', head: true }).eq('is_active', true),
+      supabase.from('users').select('*', { count: 'exact', head: true }).gte('created_at', monthStart),
+      supabase.from('payments').select('amount').eq('status', 'aprovado').gte('created_at', monthStart),
+      supabase.from('appointments').select('id, appointment_time, users(name), services(name), professionals(name)').eq('appointment_date', today).in('status', ['confirmado', 'pendente_pagamento']).order('appointment_time'),
+      supabase.from('users').select('id, name').not('birth_date', 'is', null).like('birth_date', `%-${todayMMDD}`),
     ]);
+
+    const revenueMonth = (revenueRows.data ?? []).reduce((sum: number, p: any) => sum + Number(p.amount), 0);
 
     return {
       totalAppointmentsToday: apptToday.count ?? 0,
@@ -61,6 +68,10 @@ export const adminService = {
       approvedPayments: approvedPay.count ?? 0,
       activeCoupons: coupons.count ?? 0,
       totalCustomers: customers.count ?? 0,
+      newCustomersMonth: newCustomers.count ?? 0,
+      revenueMonth,
+      upcomingToday: upcomingRows.data ?? [],
+      birthdaysToday: birthdayRows.data ?? [],
     };
   },
 

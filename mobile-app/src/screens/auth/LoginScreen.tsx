@@ -13,7 +13,7 @@ import { AuthStackParamList } from '../../types';
 import { colors, textStyles, spacing } from '../../theme';
 import { Button, Input } from '../../components/common';
 import { useAuthStore } from '../../store/authStore';
-import { MOCK_USER } from '../../mocks/data';
+import { authService } from '../../services/api/auth';
 
 type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Login'>;
@@ -35,10 +35,14 @@ export function LoginScreen({ navigation }: Props) {
     setError('');
     setLoading(true);
 
-    // Simulates API call — replace with real auth later
-    await new Promise((r) => setTimeout(r, 1200));
-    setUser(MOCK_USER, { accessToken: 'mock-token', refreshToken: 'mock-refresh' });
-    setLoading(false);
+    try {
+      const { user, tokens } = await authService.login({ email, password });
+      setUser(user, tokens);
+    } catch (e: any) {
+      setError(e?.response?.data?.message ?? e?.message ?? 'Erro ao entrar. Verifique seus dados.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

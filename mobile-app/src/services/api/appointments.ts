@@ -80,7 +80,7 @@ export const appointmentsService = {
       await new Promise((r) => setTimeout(r, 600));
       return MOCK_APPOINTMENTS;
     }
-    const { data } = await apiClient.get('/appointments/me');
+    const { data } = await apiClient.get('/appointments');
     return (data.data as any[]).map(mapAppointment);
   },
 

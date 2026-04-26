@@ -27,7 +27,7 @@ export const useBookingStore = create<BookingState>((set) => ({
     set({ selectedService: service, selectedProfessional: null, selectedDate: null, selectedTime: null }),
 
   selectProfessional: (professional) =>
-    set({ selectedProfessional: professional }),
+    set({ selectedProfessional: professional, selectedTime: null }),
 
   selectDate: (date) =>
     set({ selectedDate: date, selectedTime: null }),
