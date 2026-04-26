@@ -3,9 +3,6 @@
     "name": "Studio Fernanda Correa",
     "slug": "studio-fernanda-correa",
     "version": "1.0.0",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -59,14 +56,5 @@
         }
       ]
     ],
-    "extra": {
-      "eas": {
-        "projectId": "REPLACE_WITH_YOUR_EAS_PROJECT_ID"
-      }
-    },
-    "updates": {
-      "fallbackToCacheTimeout": 0,
-      "url": "https://u.expo.dev/REPLACE_WITH_YOUR_EAS_PROJECT_ID"
-    }
   }
 }
