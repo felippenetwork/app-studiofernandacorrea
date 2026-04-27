@@ -65,15 +65,5 @@ appointmentsRouter.post('/', validate(createAppointmentSchema), async (req: Requ
   }
 });
 
-// PATCH /api/appointments/:id/cancel
-appointmentsRouter.patch('/:id/cancel', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { id: userId } = (req as AuthenticatedRequest).user;
-    const appointment = await appointmentsService.cancel(req.params.id, userId);
-    res.json({ data: appointment, message: 'Agendamento cancelado.' });
-  } catch (err) {
-    const message = (err as Error).message;
-    const status = message.includes('não encontrado') ? 404 : 400;
-    res.status(status).json({ error: 'CancelError', message });
-  }
-});
+// Cancelamento de agendamentos não é permitido pelo cliente.
+// Em caso de necessidade, o cancelamento é feito diretamente no painel Trinks pela profissional.

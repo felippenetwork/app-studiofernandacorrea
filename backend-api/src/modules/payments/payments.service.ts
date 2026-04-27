@@ -3,6 +3,7 @@ import { env, hasSupabase, hasMercadoPago } from '../../config/env';
 import { DbPayment, PaymentMethod, BOOKING_FEE } from '../../types';
 import { appointmentsRepository } from '../appointments/appointments.repository';
 import { pushService } from '../../services/push.service';
+import { trinksService } from '../trinks/trinks.service';
 
 export interface CreatePaymentResult {
   paymentId: string;
@@ -68,7 +69,9 @@ export const paymentsService = {
       });
       await appointmentsRepository.confirmPayment(appointmentId, paymentId);
 
-      // Trigger push notification (non-blocking)
+      // Sync to Trinks (non-blocking) — appointment appears in professional's agenda
+      _syncToTrinks(appointmentId).catch(() => {});
+      // Push notification (non-blocking)
       await _triggerConfirmationPush(userId, appointmentId).catch(() => {});
     }
 
@@ -159,6 +162,8 @@ export const paymentsService = {
     if (newStatus === 'aprovado') {
       await appointmentsRepository.confirmPayment(dbPayment.appointment_id, externalPaymentId);
       console.log(`[payments] ✓ Appointment ${dbPayment.appointment_id} confirmed.`);
+      // Sync to Trinks (non-blocking) — appointment appears in professional's agenda
+      _syncToTrinks(dbPayment.appointment_id).catch(() => {});
       await _triggerConfirmationPush(dbPayment.user_id, dbPayment.appointment_id).catch(() => {});
     }
   },
@@ -287,6 +292,46 @@ async function _createCheckoutPreference(
     preferenceId: preference.id,
     redirectUrl: preference.init_point,
   };
+}
+
+// ─── Sync confirmed appointment to Trinks ─────────────────────────────────────
+// Called after payment is approved. Creates the appointment in the professional's
+// Trinks agenda and saves the trinks_appointment_id for future webhook correlation.
+
+async function _syncToTrinks(appointmentId: string): Promise<void> {
+  if (!hasSupabase) return;
+
+  const { supabase } = await import('../../config/supabase');
+  const { data } = await supabase
+    .from('appointments')
+    .select(`
+      id, service_id, professional_id, appointment_date, appointment_time,
+      user:users(name, phone, email)
+    `)
+    .eq('id', appointmentId)
+    .maybeSingle();
+
+  if (!data) return;
+
+  const appt = data as any;
+  const user = appt.user;
+
+  trinksService.createAppointment({
+    serviceId: String(appt.service_id),
+    professionalId: String(appt.professional_id),
+    date: appt.appointment_date,
+    time: appt.appointment_time,
+    clientName: user?.name,
+    clientPhone: user?.phone,
+    clientEmail: user?.email,
+  }).then(async (result: { id?: string }) => {
+    if (result?.id) {
+      await appointmentsRepository.updateTrinksId(appointmentId, result.id);
+      console.log(`[payments] ✓ Trinks appointment created: ${result.id} → ${appointmentId}`);
+    }
+  }).catch((err: Error) => {
+    console.warn('[payments] Trinks sync failed (non-fatal):', err.message);
+  });
 }
 
 // ─── Trigger confirmation push ────────────────────────────────────────────────

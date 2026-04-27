@@ -4,30 +4,27 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
-  Alert,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useFocusEffect } from '@react-navigation/native';
+import { useQuery } from '@tanstack/react-query';
 import { Appointment, AppointmentStatus } from '../../types';
 import { colors, textStyles, spacing, borderRadius } from '../../theme';
-import { AppointmentCard, Badge } from '../../components/common';
+import { AppointmentCard } from '../../components/common';
 import { appointmentsService } from '../../services/api/appointments';
 import { formatCurrency } from '../../utils/formatters';
+import { Ionicons } from '@expo/vector-icons';
 
 type Tab = 'proximos' | 'historico';
 
 const UPCOMING_STATUSES: AppointmentStatus[] = ['pendente_pagamento', 'confirmado'];
 const PAST_STATUSES: AppointmentStatus[] = ['concluido', 'cancelado', 'nao_compareceu'];
-const CANCELLABLE: AppointmentStatus[] = ['pendente_pagamento', 'confirmado'];
 
 export function MyAppointmentsScreen() {
   const insets = useSafeAreaInsets();
-  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<Tab>('proximos');
 
   const {
@@ -40,37 +37,11 @@ export function MyAppointmentsScreen() {
     queryFn: appointmentsService.getMyAppointments,
   });
 
-  // Refetch whenever this tab comes into focus (e.g. after booking)
   useFocusEffect(
     useCallback(() => {
       refetch();
     }, [refetch])
   );
-
-  const { mutate: cancelAppointment, isPending: cancelling } = useMutation({
-    mutationFn: (id: string) => appointmentsService.cancelAppointment(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['appointments'] });
-    },
-    onError: (error: Error) => {
-      Alert.alert('Erro', error.message || 'Não foi possível cancelar o agendamento.');
-    },
-  });
-
-  const handleCancel = (appointment: Appointment) => {
-    Alert.alert(
-      'Cancelar agendamento',
-      `Deseja cancelar "${appointment.service.name}" do dia ${appointment.appointmentDate} às ${appointment.appointmentTime}?`,
-      [
-        { text: 'Não', style: 'cancel' },
-        {
-          text: 'Cancelar agendamento',
-          style: 'destructive',
-          onPress: () => cancelAppointment(appointment.id),
-        },
-      ]
-    );
-  };
 
   const list =
     activeTab === 'proximos'
@@ -80,16 +51,6 @@ export function MyAppointmentsScreen() {
   const renderItem = ({ item }: { item: Appointment }) => (
     <View>
       <AppointmentCard appointment={item} />
-      {CANCELLABLE.includes(item.status) && (
-        <TouchableOpacity
-          onPress={() => handleCancel(item)}
-          disabled={cancelling}
-          style={styles.cancelBtn}
-        >
-          <Ionicons name="close-circle-outline" size={14} color={colors.error} />
-          <Text style={styles.cancelBtnText}>Cancelar agendamento</Text>
-        </TouchableOpacity>
-      )}
       {item.status === 'pendente_pagamento' && (
         <View style={styles.paymentAlert}>
           <Ionicons name="alert-circle-outline" size={14} color={colors.warning} />
@@ -112,7 +73,6 @@ export function MyAppointmentsScreen() {
         )}
       </View>
 
-      {/* Tabs */}
       <View style={styles.tabs}>
         {(['proximos', 'historico'] as Tab[]).map((tab) => (
           <TouchableOpacity
@@ -197,15 +157,6 @@ const styles = StyleSheet.create({
   tabLabel: { ...textStyles.labelMedium, color: colors.textTertiary, fontSize: 13 },
   tabLabelActive: { color: colors.textPrimary },
   list: { paddingHorizontal: spacing[5], paddingBottom: spacing[8] },
-  cancelBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: -spacing[2],
-    marginBottom: spacing[3],
-    paddingLeft: spacing[2],
-  },
-  cancelBtnText: { ...textStyles.caption, color: colors.error },
   paymentAlert: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -215,7 +166,6 @@ const styles = StyleSheet.create({
     padding: spacing[3],
     marginTop: -spacing[2],
     marginBottom: spacing[3],
-    marginHorizontal: 0,
   },
   paymentAlertText: { ...textStyles.caption, color: colors.warning, flex: 1, lineHeight: 18 },
   stateCenter: {

@@ -1,6 +1,4 @@
 import { appointmentsRepository } from './appointments.repository';
-import { trinksService } from '../trinks/trinks.service';
-import { pushService } from '../../services/push.service';
 import { adminNotificationsService } from '../admin-notifications/admin-notifications.service';
 import { CreateAppointmentInput, BOOKING_FEE, DbAppointment } from '../../types';
 import { hasSupabase } from '../../config/env';
@@ -33,7 +31,6 @@ export const appointmentsService = {
     const remainingAmount = servicePrice - bookingFee;
 
     if (!hasSupabase) {
-      // Return an in-memory mock appointment for dev without DB
       const mock: DbAppointment = {
         id: `apt-${Date.now()}`,
         user_id: userId,
@@ -54,7 +51,6 @@ export const appointmentsService = {
       } as unknown as DbAppointment;
       mockCreated.push(mock);
       console.log(`[appointments] Mock appointment created: ${mock.id}`);
-      // Notify admin
       adminNotificationsService.create({
         type: 'new_appointment',
         title: 'Novo agendamento',
@@ -65,7 +61,7 @@ export const appointmentsService = {
       return mock;
     }
 
-    const payload = {
+    const appointment = await appointmentsRepository.create({
       user_id: userId,
       trinks_appointment_id: null,
       service_id: input.serviceId,
@@ -79,11 +75,8 @@ export const appointmentsService = {
       payment_status: 'pendente' as const,
       payment_id: null,
       notes: input.notes ?? null,
-    };
+    });
 
-    const appointment = await appointmentsRepository.create(payload);
-
-    // Notify admin (non-blocking)
     adminNotificationsService.create({
       type: 'new_appointment',
       title: 'Novo agendamento',
@@ -92,56 +85,10 @@ export const appointmentsService = {
       entityId: appointment.id,
     }).catch(() => {});
 
-    // Sync to Trinks (non-blocking) — saves trinks_appointment_id for webhook correlation
-    trinksService.createAppointment({
-      serviceId: input.serviceId,
-      professionalId: input.professionalId,
-      date: input.appointmentDate,
-      time: input.appointmentTime,
-    }).then(async (trinksResult: { id?: string }) => {
-      if (trinksResult?.id) {
-        await appointmentsRepository.updateTrinksId(appointment.id, trinksResult.id);
-        console.log(`[appointments] Trinks id saved: ${trinksResult.id} → appointment ${appointment.id}`);
-      }
-    }).catch((err: Error) => {
-      console.warn('[appointments] Trinks sync failed (non-fatal):', err.message);
-    });
+    // Trinks sync runs in payments.service.ts AFTER the booking fee is confirmed.
+    // Only paid appointments appear in the professional's Trinks agenda.
 
     return appointment;
-  },
-
-  async cancel(id: string, userId: string) {
-    if (!hasSupabase) {
-      const idx = mockCreated.findIndex((a) => a.id === id);
-      if (idx !== -1) {
-        mockCreated[idx] = { ...mockCreated[idx], status: 'cancelado', updated_at: new Date().toISOString() };
-        return mockCreated[idx];
-      }
-      const mock = MOCK_APPOINTMENTS.find((a) => a.id === id);
-      if (!mock) throw new Error('Agendamento não encontrado.');
-      return { ...mock, status: 'cancelado' } as unknown as DbAppointment;
-    }
-
-    const appointment = await appointmentsRepository.findById(id, userId);
-    if (!appointment) throw new Error('Agendamento não encontrado.');
-    if (['concluido', 'cancelado'].includes(appointment.status)) {
-      throw new Error('Agendamento não pode ser cancelado neste status.');
-    }
-
-    const updated = await appointmentsRepository.updateStatus(id, userId, 'cancelado');
-
-    if (appointment.trinks_appointment_id) {
-      trinksService.cancelAppointment(appointment.trinks_appointment_id).catch((err: Error) => {
-        console.warn('[appointments] Trinks cancel sync failed:', err.message);
-      });
-    }
-
-    // Push notification (non-blocking)
-    pushService.appointmentCancelled(userId, 'seu agendamento').catch((err: Error) => {
-      console.warn('[appointments] Push cancel notification failed:', err.message);
-    });
-
-    return updated;
   },
 };
 
@@ -150,9 +97,9 @@ export const appointmentsService = {
 async function getServicePrice(serviceId: string): Promise<number> {
   if (!hasSupabase) {
     const prices: Record<string, number> = {
-      'svc-1': 120, 'svc-2': 280, 'svc-3': 350,
-      'svc-4': 90,  'svc-5': 180, 'svc-6': 60,
-      'svc-7': 200, 'svc-8': 160,
+      '1': 120, '2': 280, '3': 350,
+      '4': 90,  '5': 180, '6': 60,
+      '7': 200, '8': 160,
     };
     return prices[serviceId] ?? 100;
   }
