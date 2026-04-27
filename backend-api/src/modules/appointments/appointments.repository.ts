@@ -86,6 +86,15 @@ export const appointmentsRepository = {
     return data as DbAppointment;
   },
 
+  async updateTrinksId(id: string, trinksAppointmentId: string): Promise<void> {
+    if (!hasSupabase) return;
+    const { error } = await supabase
+      .from('appointments')
+      .update({ trinks_appointment_id: trinksAppointmentId, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) console.warn('[appointments] Failed to save trinks_appointment_id:', error.message);
+  },
+
   async confirmPayment(id: string, paymentId: string): Promise<DbAppointment> {
     if (!hasSupabase) throw new Error('Banco de dados não configurado.');
 

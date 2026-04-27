@@ -92,7 +92,7 @@ export const appointmentsService = {
       entityId: appointment.id,
     }).catch(() => {});
 
-    // Sync to Trinks (non-blocking)
+    // Sync to Trinks (non-blocking) — saves trinks_appointment_id for webhook correlation
     trinksService.createAppointment({
       serviceId: input.serviceId,
       professionalId: input.professionalId,
@@ -100,7 +100,8 @@ export const appointmentsService = {
       time: input.appointmentTime,
     }).then(async (trinksResult: { id?: string }) => {
       if (trinksResult?.id) {
-        await appointmentsRepository.updateStatus(appointment.id, userId, appointment.status);
+        await appointmentsRepository.updateTrinksId(appointment.id, trinksResult.id);
+        console.log(`[appointments] Trinks id saved: ${trinksResult.id} → appointment ${appointment.id}`);
       }
     }).catch((err: Error) => {
       console.warn('[appointments] Trinks sync failed (non-fatal):', err.message);
