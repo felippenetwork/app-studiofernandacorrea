@@ -28,6 +28,14 @@ export interface DashboardStats {
 
 // ─── Services ────────────────────────────────────────────────────────────────
 
+export interface ServiceVariation {
+  id: string;
+  name: string;
+  price: number;
+  durationMinutes?: number;
+  description?: string;
+}
+
 export interface Service {
   id: string;
   name: string;
@@ -38,6 +46,7 @@ export interface Service {
   imageUrl?: string;
   isActive: boolean;
   bookingFeeApplicable: boolean;
+  variations: ServiceVariation[];
 }
 
 // ─── Professionals ───────────────────────────────────────────────────────────

@@ -4,16 +4,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Pencil, Trash2, Loader2, Search, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, Search, X, ChevronDown, ChevronUp, Layers } from 'lucide-react';
 import { servicesApi } from '@/lib/api';
-import { Service } from '@/types';
+import { Service, ServiceVariation } from '@/types';
 import { formatCurrency, formatDuration } from '@/lib/formatters';
-import { getErrorMessage } from '@/lib/utils';
+import { getErrorMessage, cn } from '@/lib/utils';
 
 const schema = z.object({
   name: z.string().min(2, 'Nome obrigatório'),
   description: z.string().optional(),
-  price: z.coerce.number().positive('Preço obrigatório'),
+  price: z.coerce.number().nonnegative('Preço inválido'),
   durationMinutes: z.coerce.number().int().positive('Duração obrigatória'),
   category: z.string().min(1, 'Categoria obrigatória'),
   imageUrl: z.string().url('URL inválida').optional().or(z.literal('')),
@@ -21,7 +21,156 @@ const schema = z.object({
 });
 type ServiceForm = z.infer<typeof schema>;
 
-const CATEGORIES = ['cabelo', 'unhas', 'pele', 'maquiagem', 'sobrancelha', 'outros'];
+const CATEGORIES = ['cabelo', 'unhas', 'pele', 'maquiagem', 'sobrancelha', 'cílios', 'outros'];
+
+// ─── Variation Editor ─────────────────────────────────────────────────────────
+
+function VariationEditor({
+  variations,
+  onChange,
+}: {
+  variations: ServiceVariation[];
+  onChange: (v: ServiceVariation[]) => void;
+}) {
+  function add() {
+    onChange([...variations, { id: `var-${Date.now()}`, name: '', price: 0 }]);
+  }
+
+  function remove(id: string) {
+    onChange(variations.filter((v) => v.id !== id));
+  }
+
+  function update(id: string, field: keyof ServiceVariation, value: any) {
+    onChange(variations.map((v) => (v.id === id ? { ...v, [field]: value } : v)));
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div>
+          <label className="text-sm font-medium text-gray-700">Variações</label>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {variations.length === 0
+              ? 'Sem variações — todos pagam o preço base.'
+              : `${variations.length} variação(ões) — o cliente escolhe ao agendar.`}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={add}
+          className="flex items-center gap-1 text-xs text-[#C9A4A0] hover:text-[#b8918d] font-medium"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Adicionar variação
+        </button>
+      </div>
+
+      {variations.length > 0 && (
+        <div className="space-y-2">
+          {/* Header labels */}
+          <div className="grid grid-cols-[1fr_100px_72px_28px] gap-2 px-1">
+            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Nome</span>
+            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Preço (R$)</span>
+            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Min.</span>
+            <span />
+          </div>
+
+          {variations.map((v) => (
+            <div key={v.id} className="grid grid-cols-[1fr_100px_72px_28px] gap-2 items-center bg-gray-50 rounded-lg px-2 py-2">
+              <input
+                value={v.name}
+                onChange={(e) => update(v.id, 'name', e.target.value)}
+                placeholder="ex: Colocação"
+                className="h-8 px-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#C9A4A0] bg-white"
+              />
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={v.price}
+                onChange={(e) => update(v.id, 'price', Number(e.target.value))}
+                className="h-8 px-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#C9A4A0] bg-white"
+              />
+              <input
+                type="number"
+                min="1"
+                value={v.durationMinutes ?? ''}
+                onChange={(e) => update(v.id, 'durationMinutes', e.target.value ? Number(e.target.value) : undefined)}
+                placeholder="—"
+                className="h-8 px-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#C9A4A0] bg-white"
+              />
+              <button
+                type="button"
+                onClick={() => remove(v.id)}
+                className="w-7 h-7 flex items-center justify-center rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Price display helper ─────────────────────────────────────────────────────
+
+function PriceCell({ service }: { service: Service }) {
+  if (!service.variations?.length) {
+    return <span>{formatCurrency(service.price)}</span>;
+  }
+  const prices = service.variations.map((v) => v.price);
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  if (min === max) return <span>{formatCurrency(min)}</span>;
+  return (
+    <span className="text-gray-700">
+      {formatCurrency(min)}<span className="text-gray-400"> – </span>{formatCurrency(max)}
+    </span>
+  );
+}
+
+// ─── Expandable variations row ────────────────────────────────────────────────
+
+function VariationsBadge({ service }: { service: Service }) {
+  const [open, setOpen] = useState(false);
+  const count = service.variations?.length ?? 0;
+  if (count === 0) return null;
+
+  return (
+    <div className="mt-0.5">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1 text-[11px] text-[#C9A4A0] hover:text-[#b8918d] font-medium"
+      >
+        <Layers className="w-3 h-3" />
+        {count} variação(ões)
+        {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+      </button>
+      {open && (
+        <div className="mt-1.5 ml-1 space-y-0.5">
+          {service.variations.map((v) => (
+            <div key={v.id} className="flex items-center gap-2 text-[11px] text-gray-600">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#C9A4A0] flex-shrink-0" />
+              <span className="font-medium">{v.name}</span>
+              <span className="text-gray-400">·</span>
+              <span>{formatCurrency(v.price)}</span>
+              {v.durationMinutes && (
+                <>
+                  <span className="text-gray-400">·</span>
+                  <span className="text-gray-400">{v.durationMinutes} min</span>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ServicesPage() {
   const qc = useQueryClient();
@@ -30,18 +179,19 @@ export default function ServicesPage() {
   const [showForm, setShowForm] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [variations, setVariations] = useState<ServiceVariation[]>([]);
 
   const { data: services = [], isLoading } = useQuery<Service[]>({
     queryKey: ['admin-services'],
     queryFn: servicesApi.list,
   });
 
-  const { register, handleSubmit, reset, setValue, formState: { errors, isSubmitting } } = useForm<ServiceForm>({
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<ServiceForm>({
     resolver: zodResolver(schema),
   });
 
   const createMutation = useMutation({
-    mutationFn: servicesApi.create,
+    mutationFn: (data: any) => servicesApi.create(data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-services'] }); closeForm(); },
     onError: (e) => setError(getErrorMessage(e)),
   });
@@ -59,6 +209,7 @@ export default function ServicesPage() {
 
   function openCreate() {
     setEditing(null);
+    setVariations([]);
     reset({ name: '', description: '', price: 0, durationMinutes: 60, category: 'cabelo', isActive: true });
     setShowForm(true);
     setError(null);
@@ -66,24 +217,32 @@ export default function ServicesPage() {
 
   function openEdit(s: Service) {
     setEditing(s);
-    reset({ name: s.name, description: s.description ?? '', price: s.price, durationMinutes: s.durationMinutes, category: s.category, imageUrl: s.imageUrl ?? '', isActive: s.isActive });
+    setVariations(s.variations ?? []);
+    reset({
+      name: s.name, description: s.description ?? '',
+      price: s.price, durationMinutes: s.durationMinutes,
+      category: s.category, imageUrl: s.imageUrl ?? '',
+      isActive: s.isActive,
+    });
     setShowForm(true);
     setError(null);
   }
 
-  function closeForm() { setShowForm(false); setEditing(null); }
+  function closeForm() { setShowForm(false); setEditing(null); setVariations([]); }
 
   const onSubmit = (data: ServiceForm) => {
     setError(null);
+    const payload = { ...data, variations };
     if (editing) {
-      updateMutation.mutate({ id: editing.id, data });
+      updateMutation.mutate({ id: editing.id, data: payload });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(payload);
     }
   };
 
   const filtered = services.filter((s) =>
-    s.name.toLowerCase().includes(search.toLowerCase()) || s.category.includes(search.toLowerCase())
+    s.name.toLowerCase().includes(search.toLowerCase()) ||
+    s.category.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -135,12 +294,20 @@ export default function ServicesPage() {
             <tbody className="divide-y divide-gray-50">
               {filtered.map((s) => (
                 <tr key={s.id} className="hover:bg-gray-50/50">
-                  <td className="px-5 py-3.5 font-medium text-gray-900">{s.name}</td>
+                  <td className="px-5 py-3.5">
+                    <p className="font-medium text-gray-900">{s.name}</p>
+                    <VariationsBadge service={s} />
+                  </td>
                   <td className="px-4 py-3.5 text-gray-600 capitalize">{s.category}</td>
-                  <td className="px-4 py-3.5 text-gray-900">{formatCurrency(s.price)}</td>
+                  <td className="px-4 py-3.5 text-gray-900">
+                    <PriceCell service={s} />
+                  </td>
                   <td className="px-4 py-3.5 text-gray-600">{formatDuration(s.durationMinutes)}</td>
                   <td className="px-4 py-3.5">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${s.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                    <span className={cn(
+                      'px-2 py-0.5 rounded-full text-xs font-medium',
+                      s.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                    )}>
                       {s.isActive ? 'Ativo' : 'Inativo'}
                     </span>
                   </td>
@@ -164,26 +331,35 @@ export default function ServicesPage() {
       {/* Form Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h3 className="font-semibold text-gray-900">{editing ? 'Editar serviço' : 'Novo serviço'}</h3>
-              <button onClick={closeForm} className="p-1 rounded hover:bg-gray-100 text-gray-400"><X className="w-5 h-5" /></button>
+              <button onClick={closeForm} className="p-1 rounded hover:bg-gray-100 text-gray-400">
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4">
+
+            <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4 overflow-y-auto flex-1">
               {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
-                <input {...register('name')} className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]" />
+                <input {...register('name')} placeholder="ex: Cílios Fio a Fio Clássico" className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]" />
                 {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
               </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
                 <textarea {...register('description')} rows={2} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0] resize-none" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Preço (R$) *</label>
-                  <input {...register('price')} type="number" step="0.01" className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Preço base (R$)
+                    {variations.length > 0 && <span className="text-gray-400 font-normal"> (padrão)</span>}
+                  </label>
+                  <input {...register('price')} type="number" step="0.01" min="0" className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]" />
                   {errors.price && <p className="text-red-500 text-xs mt-1">{errors.price.message}</p>}
                 </div>
                 <div>
@@ -191,21 +367,29 @@ export default function ServicesPage() {
                   <input {...register('durationMinutes')} type="number" className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]" />
                   {errors.durationMinutes && <p className="text-red-500 text-xs mt-1">{errors.durationMinutes.message}</p>}
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Categoria *</label>
+                  <select {...register('category')} className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0] bg-white">
+                    {CATEGORIES.map((c) => <option key={c} value={c} className="capitalize">{c}</option>)}
+                  </select>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Categoria *</label>
-                <select {...register('category')} className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0] bg-white">
-                  {CATEGORIES.map((c) => <option key={c} value={c} className="capitalize">{c}</option>)}
-                </select>
-              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">URL da imagem</label>
                 <input {...register('imageUrl')} type="url" className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]" />
               </div>
+
+              {/* Variations editor */}
+              <div className="border-t border-gray-100 pt-4">
+                <VariationEditor variations={variations} onChange={setVariations} />
+              </div>
+
               <div className="flex items-center gap-2">
                 <input {...register('isActive')} type="checkbox" id="isActive" className="w-4 h-4 accent-[#C9A4A0]" />
                 <label htmlFor="isActive" className="text-sm text-gray-700">Serviço ativo</label>
               </div>
+
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={closeForm} className="flex-1 h-10 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Cancelar</button>
                 <button type="submit" disabled={isSubmitting} className="flex-1 h-10 bg-[#C9A4A0] hover:bg-[#b8918d] disabled:opacity-60 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2">

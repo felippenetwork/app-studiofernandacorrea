@@ -5,10 +5,14 @@ import { MOCK_APPOINTMENTS } from '../appointments/appointments.mock';
 // ─── Mock data ────────────────────────────────────────────────────────────────
 
 const MOCK_SERVICES = [
-  { id: 'svc-1', name: 'Coloração', description: 'Coloração completa', price: 120, durationMinutes: 120, category: 'cabelo', isActive: true, imageUrl: undefined, bookingFeeApplicable: true },
-  { id: 'svc-2', name: 'Mechas', description: 'Mechas e luzes', price: 280, durationMinutes: 180, category: 'cabelo', isActive: true, imageUrl: undefined, bookingFeeApplicable: true },
-  { id: 'svc-3', name: 'Alisamento', description: 'Progressiva', price: 350, durationMinutes: 240, category: 'cabelo', isActive: true, imageUrl: undefined, bookingFeeApplicable: true },
-  { id: 'svc-4', name: 'Manicure', description: 'Manicure completa', price: 90, durationMinutes: 60, category: 'unhas', isActive: true, imageUrl: undefined, bookingFeeApplicable: true },
+  { id: 'svc-1', name: 'Cílios Fio a Fio Clássico', description: 'Aplicação de extensão de cílios fio a fio', price: 150, durationMinutes: 120, category: 'outros', isActive: true, imageUrl: undefined, bookingFeeApplicable: true, variations: [
+    { id: 'var-1a', name: 'Colocação', price: 150, durationMinutes: 120, description: 'Para quem nunca colocou ou passou dos 20 dias' },
+    { id: 'var-1b', name: 'Manutenção', price: 80, durationMinutes: 60, description: 'Para quem colocou entre 14 e 20 dias' },
+    { id: 'var-1c', name: 'Remoção', price: 40, durationMinutes: 30 },
+  ]},
+  { id: 'svc-2', name: 'Coloração', description: 'Coloração completa', price: 120, durationMinutes: 120, category: 'cabelo', isActive: true, imageUrl: undefined, bookingFeeApplicable: true, variations: [] },
+  { id: 'svc-3', name: 'Mechas', description: 'Mechas e luzes', price: 280, durationMinutes: 180, category: 'cabelo', isActive: true, imageUrl: undefined, bookingFeeApplicable: true, variations: [] },
+  { id: 'svc-4', name: 'Manicure', description: 'Manicure completa', price: 90, durationMinutes: 60, category: 'unhas', isActive: true, imageUrl: undefined, bookingFeeApplicable: true, variations: [] },
 ];
 
 const MOCK_PROFESSIONALS = [
@@ -84,26 +88,29 @@ export const adminService = {
       id: s.id, name: s.name, description: s.description, price: s.price,
       durationMinutes: s.duration_minutes, category: s.category,
       imageUrl: s.image_url, isActive: s.is_active,
+      variations: s.variations ?? [],
     }));
   },
 
   async createService(input: any) {
-    if (!hasSupabase) { return { id: `svc-${Date.now()}`, ...input }; }
+    if (!hasSupabase) { return { id: `svc-${Date.now()}`, variations: [], ...input }; }
     const { data, error } = await supabase.from('services').insert({
       name: input.name, description: input.description, price: input.price,
       duration_minutes: input.durationMinutes, category: input.category,
       image_url: input.imageUrl, is_active: input.isActive ?? true,
+      variations: input.variations ?? [],
     }).select().single();
     if (error) throw new Error(error.message);
     return data;
   },
 
   async updateService(id: string, input: any) {
-    if (!hasSupabase) { return { id, ...input }; }
+    if (!hasSupabase) { return { id, variations: [], ...input }; }
     const { data, error } = await supabase.from('services').update({
       name: input.name, description: input.description, price: input.price,
       duration_minutes: input.durationMinutes, category: input.category,
       image_url: input.imageUrl, is_active: input.isActive,
+      variations: input.variations ?? [],
     }).eq('id', id).select().single();
     if (error) throw new Error(error.message);
     return data;

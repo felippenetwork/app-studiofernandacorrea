@@ -23,16 +23,25 @@ adminRouter.get('/dashboard/stats', async (_req: Request, res: Response): Promis
 
 // ─── Services ─────────────────────────────────────────────────────────────────
 
+const serviceVariationSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1),
+  price: z.number().nonnegative(),
+  durationMinutes: z.number().int().positive().optional(),
+  description: z.string().optional(),
+});
+
 const serviceSchema = z.object({
   name: z.string().min(2),
   description: z.string().optional(),
-  price: z.number().positive(),
+  price: z.number().nonnegative(),
   durationMinutes: z.number().int().positive(),
   category: z.string().min(1),
   imageUrl: z.string().url().optional(),
   isActive: z.boolean().default(true),
   bookingFeeApplicable: z.boolean().default(true),
   professionalIds: z.array(z.string()).optional(),
+  variations: z.array(serviceVariationSchema).default([]),
 });
 
 adminRouter.get('/services', async (_req: Request, res: Response): Promise<void> => {
