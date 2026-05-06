@@ -107,7 +107,7 @@ export default function LoginPage() {
 
           <p className="text-xs text-gray-400 text-center mt-6">
             Acesso exclusivo para equipe interna.<br />
-            Em modo dev: <code className="bg-gray-100 px-1 rounded">admin@studiofernandacorrea.com.br</code> / <code className="bg-gray-100 px-1 rounded">admin123</code>
+            Entre em contato com o administrador para obter suas credenciais.
           </p>
         </div>
       </div>

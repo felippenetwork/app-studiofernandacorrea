@@ -119,7 +119,7 @@ app.use((_req, res) => {
 app.use(errorHandler);
 
 // ─── Start ────────────────────────────────────────────────────────────────────
-app.listen(env.PORT, () => {
+const server = app.listen(env.PORT, () => {
   console.log(`\n🌸 Studio Fernanda Correa API — ${env.NODE_ENV}`);
   console.log(`   Port        : ${env.PORT}`);
   console.log(`   Supabase    : ${hasSupabase ? '✓ connected' : '✗ mock mode'}`);
@@ -128,5 +128,23 @@ app.listen(env.PORT, () => {
   startCronJobs();
   if (isDev) console.log(`   Docs        : http://localhost:${env.PORT}/health\n`);
 });
+
+// ─── Graceful shutdown ────────────────────────────────────────────────────────
+function shutdown(signal: string) {
+  console.log(`\n[server] ${signal} received — shutting down gracefully…`);
+  server.close(() => {
+    console.log('[server] All connections closed. Exiting.');
+    process.exit(0);
+  });
+
+  // Force-kill after 10 s if connections don't drain
+  setTimeout(() => {
+    console.error('[server] Shutdown timeout — forcing exit.');
+    process.exit(1);
+  }, 10_000).unref();
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
 
 export default app;

@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { env, hasSupabase } from '../../config/env';
+import { env, hasSupabase, adminJwtSecret } from '../../config/env';
 import { supabase } from '../../config/supabase';
 
 export interface AdminUser {
@@ -11,23 +11,23 @@ export interface AdminUser {
   isActive: boolean;
 }
 
-// In-memory admin for dev mode
-const MOCK_ADMIN = {
-  id: 'admin-1',
-  name: 'Admin Studio',
-  email: 'admin@studiofernandacorrea.com.br',
-  password_hash: bcrypt.hashSync('admin123', 10),
+// Dev-only fallback (only used when Supabase is not configured)
+const DEV_ADMIN = {
+  id: 'admin-dev-1',
+  name: 'Admin Dev',
+  email: 'admin@dev.local',
+  password_hash: bcrypt.hashSync('dev-password-change-me', 10),
   role: 'owner' as const,
   is_active: true,
 };
 
 export const adminAuthService = {
   async login(email: string, password: string): Promise<{ token: string; admin: AdminUser }> {
-    let admin: typeof MOCK_ADMIN | null = null;
+    let admin: { id: string; name: string; email: string; password_hash: string; role: string; is_active: boolean } | null = null;
 
     if (!hasSupabase) {
-      if (email.toLowerCase() === MOCK_ADMIN.email) {
-        admin = MOCK_ADMIN;
+      if (email.toLowerCase() === DEV_ADMIN.email) {
+        admin = DEV_ADMIN;
       }
     } else {
       const { data } = await supabase
@@ -46,7 +46,7 @@ export const adminAuthService = {
 
     const token = jwt.sign(
       { sub: admin.id, email: admin.email, role: admin.role, type: 'admin' },
-      env.JWT_SECRET,
+      adminJwtSecret,
       { expiresIn: '8h' }
     );
 
@@ -63,21 +63,27 @@ export const adminAuthService = {
         id: admin.id,
         name: admin.name,
         email: admin.email,
-        role: admin.role,
+        role: admin.role as AdminUser['role'],
         isActive: admin.is_active,
       },
     };
   },
 
   verifyToken(token: string): { sub: string; email: string; role: string } {
-    return jwt.verify(token, env.JWT_SECRET) as { sub: string; email: string; role: string; type: string };
+    return jwt.verify(token, adminJwtSecret) as { sub: string; email: string; role: string; type: string };
   },
 
   async createAdmin(data: { name: string; email: string; password: string; role: string }): Promise<AdminUser> {
     const password_hash = await bcrypt.hash(data.password, 12);
 
     if (!hasSupabase) {
-      return { id: `admin-${Date.now()}`, name: data.name, email: data.email, role: data.role as AdminUser['role'], isActive: true };
+      return {
+        id: `admin-${Date.now()}`,
+        name: data.name,
+        email: data.email,
+        role: data.role as AdminUser['role'],
+        isActive: true,
+      };
     }
 
     const { data: created, error } = await supabase

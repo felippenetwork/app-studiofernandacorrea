@@ -14,10 +14,10 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQuery } from '@tanstack/react-query';
 import { ProfileStackParamList } from '../../types';
-import { colors, textStyles, spacing, borderRadius, shadows } from '../../theme';
+import { colors, textStyles, spacing } from '../../theme';
 import { Avatar, Card, Divider } from '../../components/common';
 import { useAuthStore } from '../../store/authStore';
-import { MOCK_APPOINTMENTS } from '../../mocks/data';
+import { appointmentsService } from '../../services/api/appointments';
 import { settingsService } from '../../services/api/settings';
 
 type Nav = NativeStackNavigationProp<ProfileStackParamList, 'ProfileMain'>;
@@ -35,13 +35,20 @@ export function ProfileScreen() {
   const navigation = useNavigation<Nav>();
   const { user, logout } = useAuthStore();
 
-  const completedCount = MOCK_APPOINTMENTS.filter((a) => a.status === 'concluido').length;
+  const { data: appointments = [] } = useQuery({
+    queryKey: ['my-appointments'],
+    queryFn: appointmentsService.getMyAppointments,
+    enabled: !!user,
+    staleTime: 1000 * 60 * 2,
+  });
 
   const { data: config } = useQuery({
     queryKey: ['public-config'],
     queryFn: settingsService.getPublicConfig,
-    staleTime: 1000 * 60 * 10, // 10 min
+    staleTime: 1000 * 60 * 10,
   });
+
+  const completedCount = appointments.filter((a) => a.status === 'concluido').length;
 
   const handleGoogleReview = async () => {
     const url = config?.googleReviewLink;
@@ -154,9 +161,8 @@ export function ProfileScreen() {
       {/* Stats */}
       <Card style={styles.statsCard} shadow="sm">
         {[
-          { label: 'Agendamentos', value: MOCK_APPOINTMENTS.length },
+          { label: 'Agendamentos', value: appointments.length },
           { label: 'Concluídos', value: completedCount },
-          { label: 'Cupons', value: 2 },
         ].map((stat, i, arr) => (
           <React.Fragment key={stat.label}>
             <View style={styles.statItem}>

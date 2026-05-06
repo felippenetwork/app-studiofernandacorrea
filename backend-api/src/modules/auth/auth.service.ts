@@ -1,7 +1,9 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { env, hasSupabase } from '../../config/env';
 import { supabase } from '../../config/supabase';
+import { emailService } from '../../services/email.service';
 import { AuthTokens, DbUser } from '../../types';
 import { RegisterInput, LoginInput } from './auth.validator';
 
@@ -30,14 +32,18 @@ function sanitizeUser(user: DbUser) {
   return safe;
 }
 
-// ─── Mock store (used when Supabase is not configured) ────────────────────────
+// ─── Mock store (dev without Supabase) ────────────────────────────────────────
 
 const mockUsers: DbUser[] = [];
 
 // ─── Service ─────────────────────────────────────────────────────────────────
 
+type RegisterResult =
+  | { emailVerificationRequired: true; email: string }
+  | { emailVerificationRequired: false; user: ReturnType<typeof sanitizeUser>; tokens: AuthTokens };
+
 export const authService = {
-  async register(input: RegisterInput) {
+  async register(input: RegisterInput): Promise<RegisterResult> {
     const passwordHash = await bcrypt.hash(input.password, SALT_ROUNDS);
 
     if (!hasSupabase) {
@@ -62,7 +68,7 @@ export const authService = {
         updated_at: new Date().toISOString(),
       };
       mockUsers.push(user);
-      return { user: sanitizeUser(user), tokens: generateTokens(user) };
+      return { emailVerificationRequired: false, user: sanitizeUser(user), tokens: generateTokens(user) };
     }
 
     const { data: existing } = await supabase
@@ -72,6 +78,11 @@ export const authService = {
       .maybeSingle();
 
     if (existing) throw new Error('E-mail já cadastrado.');
+
+    const needsVerification = emailService.hasSmtp;
+    const verificationToken = needsVerification
+      ? crypto.randomBytes(32).toString('hex')
+      : null;
 
     const { data: user, error } = await supabase
       .from('users')
@@ -83,13 +94,29 @@ export const authService = {
         birth_date: input.birth_date ?? null,
         accepts_marketing: input.accepts_marketing ?? false,
         accepts_push: input.accepts_push ?? true,
+        is_active: !needsVerification,
+        email_verification_token: verificationToken,
+        email_verified_at: needsVerification ? null : new Date().toISOString(),
       })
       .select()
       .single();
 
     if (error || !user) throw new Error('Erro ao criar conta. Tente novamente.');
 
-    return { user: sanitizeUser(user as DbUser), tokens: generateTokens(user as DbUser) };
+    if (needsVerification && verificationToken) {
+      // Fire-and-forget email — don't block the response
+      emailService
+        .sendEmailVerification(input.email, input.name, verificationToken)
+        .catch(console.error);
+
+      return { emailVerificationRequired: true, email: input.email };
+    }
+
+    return {
+      emailVerificationRequired: false,
+      user: sanitizeUser(user as DbUser),
+      tokens: generateTokens(user as DbUser),
+    };
   },
 
   async login(input: LoginInput) {
@@ -105,18 +132,71 @@ export const authService = {
       .from('users')
       .select('*')
       .eq('email', input.email)
-      .eq('is_active', true)
       .maybeSingle();
 
     if (!user) throw new Error('E-mail ou senha incorretos.');
 
-    const valid = await bcrypt.compare(input.password, (user as DbUser).password_hash);
+    const dbUser = user as DbUser;
+
+    if (!dbUser.is_active) {
+      throw new Error('Conta não ativada. Verifique seu e-mail para confirmar o cadastro.');
+    }
+
+    const valid = await bcrypt.compare(input.password, dbUser.password_hash);
     if (!valid) throw new Error('E-mail ou senha incorretos.');
 
-    return {
-      user: sanitizeUser(user as DbUser),
-      tokens: generateTokens(user as DbUser),
-    };
+    return { user: sanitizeUser(dbUser), tokens: generateTokens(dbUser) };
+  },
+
+  async verifyEmail(token: string) {
+    if (!hasSupabase) throw new Error('Verificação não disponível em modo dev.');
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('id, name, email')
+      .eq('email_verification_token', token)
+      .maybeSingle();
+
+    if (!user) throw new Error('Link inválido ou expirado.');
+
+    await supabase
+      .from('users')
+      .update({
+        is_active: true,
+        email_verified_at: new Date().toISOString(),
+        email_verification_token: null,
+      })
+      .eq('id', (user as any).id);
+
+    // Send welcome email asynchronously
+    emailService
+      .sendWelcome((user as any).email, (user as any).name)
+      .catch(console.error);
+
+    return { name: (user as any).name, email: (user as any).email };
+  },
+
+  async resendVerification(email: string) {
+    if (!hasSupabase) throw new Error('Verificação não disponível em modo dev.');
+    if (!emailService.hasSmtp) throw new Error('Serviço de e-mail não configurado.');
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('id, name, email, is_active')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (!user) throw new Error('E-mail não encontrado.');
+    if ((user as any).is_active) throw new Error('Conta já verificada. Faça login normalmente.');
+
+    const newToken = crypto.randomBytes(32).toString('hex');
+
+    await supabase
+      .from('users')
+      .update({ email_verification_token: newToken })
+      .eq('id', (user as any).id);
+
+    await emailService.sendEmailVerification(email, (user as any).name, newToken);
   },
 
   async getUserById(id: string) {

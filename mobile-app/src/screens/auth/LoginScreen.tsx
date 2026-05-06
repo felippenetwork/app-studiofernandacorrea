@@ -25,6 +25,7 @@ export function LoginScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const [unverifiedEmail, setUnverifiedEmail] = useState('');
   const { setUser } = useAuthStore();
 
   const handleLogin = async () => {
@@ -33,13 +34,20 @@ export function LoginScreen({ navigation }: Props) {
       return;
     }
     setError('');
+    setUnverifiedEmail('');
     setLoading(true);
 
     try {
       const { user, tokens } = await authService.login({ email, password });
       setUser(user, tokens);
     } catch (e: any) {
-      setError(e?.response?.data?.message ?? e?.message ?? 'Erro ao entrar. Verifique seus dados.');
+      const status = e?.response?.status;
+      const message = e?.response?.data?.message ?? e?.message ?? 'Erro ao entrar. Verifique seus dados.';
+      if (status === 403 && message.includes('não ativada')) {
+        setUnverifiedEmail(email);
+      } else {
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -64,7 +72,18 @@ export function LoginScreen({ navigation }: Props) {
 
         {/* Form */}
         <View style={styles.form}>
-          {error ? (
+          {unverifiedEmail ? (
+            <View style={styles.verifyBanner}>
+              <Text style={styles.verifyText}>
+                Confirme seu e-mail antes de entrar.
+              </Text>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('EmailVerification', { email: unverifiedEmail })}
+              >
+                <Text style={styles.verifyLink}>Reenviar e-mail de confirmação</Text>
+              </TouchableOpacity>
+            </View>
+          ) : error ? (
             <View style={styles.errorBanner}>
               <Text style={styles.errorText}>{error}</Text>
             </View>
@@ -149,6 +168,21 @@ const styles = StyleSheet.create({
   errorText: {
     ...textStyles.bodySmall,
     color: colors.error,
+  },
+  verifyBanner: {
+    backgroundColor: colors.primaryGhost,
+    borderRadius: 8,
+    padding: spacing[3],
+    marginBottom: spacing[4],
+    gap: spacing[2],
+  },
+  verifyText: {
+    ...textStyles.bodySmall,
+    color: colors.textPrimary,
+  },
+  verifyLink: {
+    ...textStyles.labelMedium,
+    color: colors.primary,
   },
   forgotBtn: {
     alignSelf: 'flex-end',

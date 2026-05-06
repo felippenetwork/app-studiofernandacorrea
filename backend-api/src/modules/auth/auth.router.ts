@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { authController } from './auth.controller';
 import { validate } from '../../middleware/validate.middleware';
 import { authMiddleware } from '../../middleware/auth.middleware';
@@ -11,6 +12,16 @@ authRouter.post('/register', validate(registerSchema), authController.register);
 
 // POST /api/auth/login
 authRouter.post('/login', validate(loginSchema), authController.login);
+
+// GET /api/auth/verify-email?token=xxx  — link from confirmation email (browser access)
+authRouter.get('/verify-email', authController.verifyEmail);
+
+// POST /api/auth/resend-verification
+authRouter.post(
+  '/resend-verification',
+  validate(z.object({ email: z.string().email() })),
+  authController.resendVerification
+);
 
 // POST /api/auth/refresh
 authRouter.post('/refresh', validate(refreshSchema), authController.refresh);

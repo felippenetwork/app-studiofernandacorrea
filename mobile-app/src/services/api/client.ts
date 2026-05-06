@@ -7,7 +7,7 @@ const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000/api';
 
 // When true, all services use local mock data (no backend needed)
 // Switch to false when backend is running
-export const USE_MOCK = process.env.EXPO_PUBLIC_USE_MOCK !== 'false';
+export const USE_MOCK = process.env.EXPO_PUBLIC_USE_MOCK === 'true';
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,
@@ -43,7 +43,8 @@ export function registerUnauthorizedHandler(handler: () => void) {
 apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
-    if (error.response?.status === 401 && _onUnauthorized) {
+    const hasToken = !!apiClient.defaults.headers.common['Authorization'];
+    if (error.response?.status === 401 && hasToken && _onUnauthorized) {
       console.warn('[API] 401 Unauthorized — triggering logout');
       _onUnauthorized();
     }

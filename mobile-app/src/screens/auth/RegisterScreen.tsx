@@ -34,7 +34,6 @@ export function RegisterScreen({ navigation }: Props) {
   const { setUser } = useAuthStore();
 
   const formatBirthDate = (text: string) => {
-    // Auto-format as DD/MM/YYYY
     const digits = text.replace(/\D/g, '');
     if (digits.length <= 2) return digits;
     if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
@@ -42,7 +41,6 @@ export function RegisterScreen({ navigation }: Props) {
   };
 
   const parseBirthDate = (formatted: string): string | null => {
-    // Convert DD/MM/YYYY to YYYY-MM-DD
     const parts = formatted.split('/');
     if (parts.length !== 3 || parts[2].length !== 4) return null;
     const [day, month, year] = parts;
@@ -81,7 +79,12 @@ export function RegisterScreen({ navigation }: Props) {
         accepts_marketing: acceptsMarketing,
         accepts_push: acceptsPush,
       });
-      setUser(result.user, result.tokens);
+
+      if (result.emailVerificationRequired) {
+        navigation.replace('EmailVerification', { email: result.email });
+      } else {
+        setUser(result.user, result.tokens);
+      }
     } catch (e: any) {
       setError(e?.response?.data?.message ?? e?.message ?? 'Erro ao criar conta. Tente novamente.');
     } finally {
@@ -166,7 +169,6 @@ export function RegisterScreen({ navigation }: Props) {
             maxLength={10}
           />
 
-          {/* Consent toggles */}
           <View style={styles.consentSection}>
             <View style={styles.consentRow}>
               <View style={styles.consentText}>

@@ -7,8 +7,8 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  Clipboard,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -84,9 +84,9 @@ export function PaymentScreen() {
     confirmPayment();
   };
 
-  const handleCopyPaste = () => {
+  const handleCopyPaste = async () => {
     if (!pixResult?.copyPaste) return;
-    Clipboard.setString(pixResult.copyPaste);
+    await Clipboard.setStringAsync(pixResult.copyPaste);
     setCopied(true);
     setTimeout(() => setCopied(false), 3000);
   };

@@ -188,6 +188,7 @@ export type AuthStackParamList = {
   Onboarding: undefined;
   Login: undefined;
   Register: undefined;
+  EmailVerification: { email: string };
 };
 
 export type MainTabParamList = {
