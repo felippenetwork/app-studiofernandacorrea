@@ -37,7 +37,7 @@ const serviceSchema = z.object({
   price: z.number().nonnegative(),
   durationMinutes: z.number().int().positive(),
   category: z.string().min(1),
-  imageUrl: z.string().url().optional(),
+  imageUrl: z.union([z.string().url(), z.literal('')]).optional().transform((v) => v || undefined),
   isActive: z.boolean().default(true),
   bookingFeeApplicable: z.boolean().default(true),
   professionalIds: z.array(z.string()).optional(),
