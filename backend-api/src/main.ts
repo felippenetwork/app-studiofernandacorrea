@@ -61,8 +61,10 @@ const authLimiter = rateLimit({
   message: { error: 'TooManyRequests', message: 'Muitas tentativas. Aguarde 15 minutos.' },
 });
 
-app.use('/api', globalLimiter);
-app.use('/api/auth', authLimiter);
+if (env.NODE_ENV !== 'test') {
+  app.use('/api', globalLimiter);
+  app.use('/api/auth', authLimiter);
+}
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) =>
@@ -118,33 +120,32 @@ app.use((_req, res) => {
 // ─── Centralized error handler (must be last) ─────────────────────────────────
 app.use(errorHandler);
 
-// ─── Start ────────────────────────────────────────────────────────────────────
-const server = app.listen(env.PORT, () => {
-  console.log(`\n🌸 Studio Fernanda Correa API — ${env.NODE_ENV}`);
-  console.log(`   Port        : ${env.PORT}`);
-  console.log(`   Supabase    : ${hasSupabase ? '✓ connected' : '✗ mock mode'}`);
-  console.log(`   Trinks      : ${hasTrinks ? '✓ connected' : '✗ mock mode'}`);
-  console.log(`   Mercado Pago: ${hasMercadoPago ? '✓ connected' : '✗ simulation'}`);
-  startCronJobs();
-  if (isDev) console.log(`   Docs        : http://localhost:${env.PORT}/health\n`);
-});
-
-// ─── Graceful shutdown ────────────────────────────────────────────────────────
-function shutdown(signal: string) {
-  console.log(`\n[server] ${signal} received — shutting down gracefully…`);
-  server.close(() => {
-    console.log('[server] All connections closed. Exiting.');
-    process.exit(0);
+// ─── Start (skipped in test mode — supertest opens its own port) ─────────────
+if (env.NODE_ENV !== 'test') {
+  const server = app.listen(env.PORT, () => {
+    console.log(`\n🌸 Studio Fernanda Correa API — ${env.NODE_ENV}`);
+    console.log(`   Port        : ${env.PORT}`);
+    console.log(`   Supabase    : ${hasSupabase ? '✓ connected' : '✗ mock mode'}`);
+    console.log(`   Trinks      : ${hasTrinks ? '✓ connected' : '✗ mock mode'}`);
+    console.log(`   Mercado Pago: ${hasMercadoPago ? '✓ connected' : '✗ simulation'}`);
+    startCronJobs();
+    if (isDev) console.log(`   Docs        : http://localhost:${env.PORT}/health\n`);
   });
 
-  // Force-kill after 10 s if connections don't drain
-  setTimeout(() => {
-    console.error('[server] Shutdown timeout — forcing exit.');
-    process.exit(1);
-  }, 10_000).unref();
-}
+  const shutdown = (signal: string) => {
+    console.log(`\n[server] ${signal} received — shutting down gracefully…`);
+    server.close(() => {
+      console.log('[server] All connections closed. Exiting.');
+      process.exit(0);
+    });
+    setTimeout(() => {
+      console.error('[server] Shutdown timeout — forcing exit.');
+      process.exit(1);
+    }, 10_000).unref();
+  };
 
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT',  () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT',  () => shutdown('SIGINT'));
+}
 
 export default app;
