@@ -83,7 +83,11 @@ export const adminService = {
 
   async listServices() {
     if (!hasSupabase) return MOCK_SERVICES;
-    const { data } = await supabase.from('services').select('*').order('sort_order', { ascending: true }).order('name');
+    // Try with sort_order first; fall back to name-ordering if column not yet migrated
+    let { data, error } = await supabase.from('services').select('*').order('sort_order', { ascending: true }).order('name');
+    if (error?.message?.includes('sort_order')) {
+      ({ data, error } = await supabase.from('services').select('*').order('name'));
+    }
     return (data ?? []).map((s: any) => ({
       id: s.id, name: s.name, description: s.description, price: s.price,
       durationMinutes: s.duration_minutes, category: s.category,
@@ -95,11 +99,18 @@ export const adminService = {
 
   async reorderServices(items: { id: string; sortOrder: number }[]) {
     if (!hasSupabase) return;
-    await Promise.all(
+    const results = await Promise.all(
       items.map(({ id, sortOrder }) =>
         supabase.from('services').update({ sort_order: sortOrder }).eq('id', id)
       )
     );
+    const firstErr = results.find((r) => r.error)?.error;
+    if (firstErr) {
+      if (firstErr.message.includes('sort_order')) {
+        throw new Error('Migration pendente: execute 005_add_service_sort_order.sql no Supabase SQL Editor.');
+      }
+      throw new Error(firstErr.message);
+    }
   },
 
   async createService(input: any) {

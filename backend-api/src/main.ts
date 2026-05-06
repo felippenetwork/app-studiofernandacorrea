@@ -20,6 +20,7 @@ import { adminNotificationsRouter } from './modules/admin-notifications/admin-no
 import { birthdayRouter } from './modules/birthday/birthday.router';
 import { startCronJobs } from './scheduler';
 import { adminService } from './modules/admin/admin.service';
+import { runMigrations } from './scripts/migrate';
 
 const app = express();
 
@@ -163,6 +164,9 @@ app.use(errorHandler);
 
 // ─── Start (skipped in test mode — supertest opens its own port) ─────────────
 if (env.NODE_ENV !== 'test') {
+  // Run DB migrations before accepting traffic
+  runMigrations().catch((e) => console.error('[migrate] failed:', e));
+
   const server = app.listen(env.PORT, () => {
     console.log(`\n🌸 Studio Fernanda Correa API — ${env.NODE_ENV}`);
     console.log(`   Port        : ${env.PORT}`);
