@@ -4,7 +4,7 @@ import { MOCK_APPOINTMENTS } from '../appointments/appointments.mock';
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
 
-const MOCK_SERVICES = [
+export const MOCK_SERVICES = [
   { id: 'svc-1', name: 'Cílios Fio a Fio Clássico', description: 'Aplicação de extensão de cílios fio a fio', price: 150, durationMinutes: 120, category: 'outros', isActive: true, imageUrl: undefined, bookingFeeApplicable: true, variations: [
     { id: 'var-1a', name: 'Colocação', price: 150, durationMinutes: 120, description: 'Para quem nunca colocou ou passou dos 20 dias' },
     { id: 'var-1b', name: 'Manutenção', price: 80, durationMinutes: 60, description: 'Para quem colocou entre 14 e 20 dias' },

@@ -92,13 +92,42 @@ app.use('/api/payments',      paymentsRouter);
 app.use('/api/notifications', notificationsRouter);
 
 // ─── Public services list (no auth) ──────────────────────────────────────────
-// Returns active services with variations for the mobile booking flow
+// Returns active services with variations for the mobile booking flow.
+// Uses Supabase as source-of-truth when populated; falls back to Trinks.
 app.get('/api/services', async (_req, res) => {
   try {
     const all = await adminService.listServices();
     const active = all.filter((s: any) => s.isActive !== false);
-    res.json({ data: active });
-  } catch {
+
+    if (active.length > 0) {
+      res.json({ data: active });
+      return;
+    }
+
+    // Supabase table empty — try Trinks, then fall back to admin mock data
+    try {
+      const { trinksService } = await import('./modules/trinks/trinks.service');
+      const trinksServices = await trinksService.getServices();
+      const mapped = trinksServices
+        .filter((s) => s.active !== false)
+        .map((s) => ({
+          id: s.id,
+          name: s.name,
+          description: s.description ?? '',
+          price: s.price,
+          durationMinutes: s.duration,
+          category: (s.category ?? 'outros').toLowerCase(),
+          isActive: true,
+          variations: [],
+        }));
+      res.json({ data: mapped });
+    } catch {
+      // Trinks unavailable — use admin mock data (includes variations for testing)
+      const { MOCK_SERVICES } = await import('./modules/admin/admin.service');
+      res.json({ data: (MOCK_SERVICES as any[]).filter((s) => s.isActive !== false) });
+    }
+  } catch (err) {
+    console.error('[/api/services]', err);
     res.status(500).json({ error: 'InternalError', message: 'Erro ao carregar serviços.' });
   }
 });
