@@ -100,6 +100,20 @@ adminRouter.get('/customers/:id', async (req: Request, res: Response): Promise<v
   catch (err) { res.status(404).json({ error: 'NotFound', message: (err as Error).message }); }
 });
 
+const createCustomerSchema = z.object({
+  name: z.string().min(2),
+  email: z.string().email(),
+  phone: z.string().optional(),
+  birthDate: z.string().optional(),
+  acceptsMarketing: z.boolean().default(false),
+  acceptsPush: z.boolean().default(false),
+});
+
+adminRouter.post('/customers', requireRole('owner', 'gerente', 'recepcao'), validate(createCustomerSchema), async (req: Request, res: Response): Promise<void> => {
+  try { res.status(201).json({ data: await adminService.createCustomer(req.body), message: 'Cliente cadastrada.' }); }
+  catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+});
+
 adminRouter.put('/customers/:id', requireRole('owner', 'gerente', 'recepcao'), async (req: Request, res: Response): Promise<void> => {
   try { res.json({ data: await adminService.updateCustomer(req.params.id, req.body), message: 'Cliente atualizado.' }); }
   catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
@@ -171,6 +185,23 @@ adminRouter.get('/appointments', async (req: Request, res: Response): Promise<vo
     const { date, status, page = '1', limit = '20' } = req.query as Record<string, string>;
     res.json({ data: await adminService.listAppointments({ date, status, page: +page, limit: +limit }) });
   } catch (err) { res.status(500).json({ error: 'InternalError', message: (err as Error).message }); }
+});
+
+const createAppointmentSchema = z.object({
+  userId: z.string(),
+  serviceId: z.string(),
+  professionalId: z.string(),
+  appointmentDate: z.string(),
+  appointmentTime: z.string(),
+  status: z.enum(['confirmado', 'pendente_pagamento']).default('confirmado'),
+  servicePrice: z.number().optional(),
+  bookingFee: z.number().optional(),
+  notes: z.string().optional(),
+});
+
+adminRouter.post('/appointments', requireRole('owner', 'gerente', 'recepcao'), validate(createAppointmentSchema), async (req: Request, res: Response): Promise<void> => {
+  try { res.status(201).json({ data: await adminService.createAppointment(req.body), message: 'Agendamento criado.' }); }
+  catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
 // ─── Payments ─────────────────────────────────────────────────────────────────

@@ -69,6 +69,7 @@ export const customersApi = {
   list: (params?: { search?: string; page?: number; limit?: number }) =>
     apiClient.get('/admin/customers', { params }).then((r) => r.data.data),
   get: (id: string) => apiClient.get(`/admin/customers/${id}`).then((r) => r.data.data),
+  create: (data: any) => apiClient.post('/admin/customers', data).then((r) => r.data.data),
   update: (id: string, data: any) => apiClient.put(`/admin/customers/${id}`, data).then((r) => r.data.data),
 };
 
@@ -95,6 +96,7 @@ export const benefitsApi = {
 export const appointmentsAdminApi = {
   list: (params?: { date?: string; status?: string; page?: number; limit?: number }) =>
     apiClient.get('/admin/appointments', { params }).then((r) => r.data.data),
+  create: (data: any) => apiClient.post('/admin/appointments', data).then((r) => r.data.data),
 };
 
 // ─── Payments ─────────────────────────────────────────────────────────────────

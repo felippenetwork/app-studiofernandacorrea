@@ -193,6 +193,36 @@ export const adminService = {
     return { customer, appointments: appointments ?? [] };
   },
 
+  async createCustomer(input: any) {
+    if (!hasSupabase) {
+      return {
+        id: `user-${Date.now()}`, name: input.name, email: input.email,
+        phone: input.phone ?? null, birthDate: input.birthDate ?? null,
+        isVip: false, isBlocked: false,
+        acceptsMarketing: input.acceptsMarketing ?? false,
+        acceptsPush: input.acceptsPush ?? false,
+        createdAt: new Date().toISOString(),
+      };
+    }
+    const { data: existing } = await supabase.from('users').select('id').eq('email', input.email).maybeSingle();
+    if (existing) throw new Error('E-mail já cadastrado.');
+    const { data, error } = await supabase.from('users').insert({
+      name: input.name, email: input.email, phone: input.phone,
+      birth_date: input.birthDate, password_hash: '',
+      accepts_marketing: input.acceptsMarketing ?? false,
+      accepts_push: input.acceptsPush ?? false,
+      is_vip: false, is_blocked: false, is_active: true,
+      email_verified_at: new Date().toISOString(),
+    }).select().single();
+    if (error) throw new Error(error.message);
+    return {
+      id: data.id, name: data.name, email: data.email, phone: data.phone,
+      isVip: data.is_vip, isBlocked: data.is_blocked, birthDate: data.birth_date,
+      acceptsMarketing: data.accepts_marketing, acceptsPush: data.accepts_push,
+      createdAt: data.created_at,
+    };
+  },
+
   async updateCustomer(id: string, input: any) {
     if (!hasSupabase) { return { id, ...input }; }
     const { data, error } = await supabase.from('users').update({
@@ -308,6 +338,33 @@ export const adminService = {
     query = query.order('appointment_date', { ascending: false }).range((page - 1) * limit, page * limit - 1);
     const { data, count } = await query;
     return { items: data ?? [], total: count ?? 0, page, limit };
+  },
+
+  async createAppointment(input: any) {
+    if (!hasSupabase) {
+      return {
+        id: `apt-${Date.now()}`,
+        user_id: input.userId, service_id: input.serviceId,
+        professional_id: input.professionalId,
+        appointment_date: input.appointmentDate, appointment_time: input.appointmentTime,
+        status: input.status ?? 'confirmado',
+        service_price: input.servicePrice ?? 0, booking_fee: input.bookingFee ?? 0,
+        remaining_amount: input.remainingAmount ?? (input.servicePrice ?? 0) - (input.bookingFee ?? 0),
+        payment_status: 'pendente', notes: input.notes ?? null,
+        created_at: new Date().toISOString(),
+      };
+    }
+    const { data, error } = await supabase.from('appointments').insert({
+      user_id: input.userId, service_id: input.serviceId,
+      professional_id: input.professionalId,
+      appointment_date: input.appointmentDate, appointment_time: input.appointmentTime,
+      status: input.status ?? 'confirmado',
+      service_price: input.servicePrice ?? 0, booking_fee: input.bookingFee ?? 0,
+      remaining_amount: input.remainingAmount ?? (input.servicePrice ?? 0) - (input.bookingFee ?? 0),
+      payment_status: 'pendente', notes: input.notes,
+    }).select().single();
+    if (error) throw new Error(error.message);
+    return data;
   },
 
   // ─── Payments (admin view) ───────────────────────────────────────────────────

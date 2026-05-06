@@ -1,19 +1,137 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
-import { Search, Crown, Ban, X, ChevronRight, Loader2, Users, Cake } from 'lucide-react';
+import { Search, Crown, Ban, ChevronRight, Loader2, Users, Cake, UserPlus, X } from 'lucide-react';
 import Link from 'next/link';
 import { customersApi } from '@/lib/api';
 import { Customer, Paginated } from '@/types';
 import { formatDate, formatRelative } from '@/lib/formatters';
 import { getErrorMessage } from '@/lib/utils';
 
+interface NewCustomerForm {
+  name: string;
+  email: string;
+  phone: string;
+  birthDate: string;
+  acceptsMarketing: boolean;
+}
+
+function NewCustomerModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [form, setForm] = useState<NewCustomerForm>({ name: '', email: '', phone: '', birthDate: '', acceptsMarketing: false });
+  const [error, setError] = useState<string | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: () => customersApi.create({
+      name: form.name.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim() || undefined,
+      birthDate: form.birthDate || undefined,
+      acceptsMarketing: form.acceptsMarketing,
+      acceptsPush: false,
+    }),
+    onSuccess: () => { onSuccess(); onClose(); },
+    onError: (e) => setError(getErrorMessage(e)),
+  });
+
+  function set(field: keyof NewCustomerForm, value: string | boolean) {
+    setForm((p) => ({ ...p, [field]: value }));
+    setError(null);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-900">Nova Cliente</h3>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          {error && (
+            <div className="px-3 py-2.5 bg-red-50 border border-red-100 rounded-lg text-sm text-red-600">{error}</div>
+          )}
+
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-600">Nome completo *</label>
+            <input
+              value={form.name}
+              onChange={(e) => set('name', e.target.value)}
+              placeholder="Ana Paula Santos"
+              className="w-full h-9 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-600">E-mail *</label>
+            <input
+              type="email"
+              value={form.email}
+              onChange={(e) => set('email', e.target.value)}
+              placeholder="ana@email.com"
+              className="w-full h-9 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-600">Telefone</label>
+              <input
+                value={form.phone}
+                onChange={(e) => set('phone', e.target.value)}
+                placeholder="(11) 99999-0000"
+                className="w-full h-9 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-600">Aniversário</label>
+              <input
+                type="date"
+                value={form.birthDate}
+                onChange={(e) => set('birthDate', e.target.value)}
+                className="w-full h-9 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]"
+              />
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.acceptsMarketing}
+              onChange={(e) => set('acceptsMarketing', e.target.checked)}
+              className="w-4 h-4 accent-[#C9A4A0]"
+            />
+            <span className="text-sm text-gray-600">Aceita receber promoções por e-mail</span>
+          </label>
+        </div>
+
+        <div className="flex gap-3 px-6 py-4 border-t border-gray-100">
+          <button
+            onClick={onClose}
+            className="flex-1 h-9 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending || !form.name.trim() || !form.email.trim()}
+            className="flex-1 h-9 bg-[#C9A4A0] hover:bg-[#b8918d] disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+          >
+            {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+            Cadastrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CustomersPage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [editing, setEditing] = useState<Customer | null>(null);
+  const [showNew, setShowNew] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<Paginated<Customer>>({
@@ -23,7 +141,7 @@ export default function CustomersPage() {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => customersApi.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-customers'] }); setEditing(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-customers'] }); },
     onError: (e) => setError(getErrorMessage(e)),
   });
 
@@ -36,12 +154,30 @@ export default function CustomersPage() {
 
   return (
     <div className="space-y-6">
+      {showNew && (
+        <NewCustomerModal
+          onClose={() => setShowNew(false)}
+          onSuccess={() => qc.invalidateQueries({ queryKey: ['admin-customers'] })}
+        />
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Clientes ({total})</h2>
           <p className="text-sm text-gray-500">Gerencie a base de clientes.</p>
         </div>
+        <button
+          onClick={() => setShowNew(true)}
+          className="flex items-center gap-2 h-9 px-4 bg-[#C9A4A0] hover:bg-[#b8918d] text-white rounded-lg text-sm font-medium transition-colors"
+        >
+          <UserPlus className="w-4 h-4" />
+          Nova Cliente
+        </button>
       </div>
+
+      {error && (
+        <div className="px-4 py-2.5 bg-red-50 border border-red-100 rounded-lg text-sm text-red-600">{error}</div>
+      )}
 
       {/* Search */}
       <div className="relative max-w-sm">

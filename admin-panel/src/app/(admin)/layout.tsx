@@ -68,7 +68,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (!mounted || !isAuthenticated) return <Spinner />;
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-[#f4f4f6]">
       {showWarning && (
         <IdleWarning
           onStay={resetTimer}
