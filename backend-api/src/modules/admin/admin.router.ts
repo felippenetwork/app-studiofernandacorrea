@@ -49,6 +49,15 @@ adminRouter.get('/services', async (_req: Request, res: Response): Promise<void>
   catch (err) { res.status(500).json({ error: 'InternalError', message: (err as Error).message }); }
 });
 
+const reorderSchema = z.object({
+  items: z.array(z.object({ id: z.string(), sortOrder: z.number().int().nonnegative() })).min(1),
+});
+
+adminRouter.patch('/services/reorder', requireRole('owner', 'gerente'), validate(reorderSchema), async (req: Request, res: Response): Promise<void> => {
+  try { await adminService.reorderServices(req.body.items); res.json({ data: null, message: 'Ordem atualizada.' }); }
+  catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+});
+
 adminRouter.post('/services', requireRole('owner', 'gerente'), validate(serviceSchema), async (req: Request, res: Response): Promise<void> => {
   try { res.status(201).json({ data: await adminService.createService(req.body), message: 'Serviço criado.' }); }
   catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }

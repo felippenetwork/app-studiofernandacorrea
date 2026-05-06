@@ -83,13 +83,23 @@ export const adminService = {
 
   async listServices() {
     if (!hasSupabase) return MOCK_SERVICES;
-    const { data } = await supabase.from('services').select('*').order('name');
+    const { data } = await supabase.from('services').select('*').order('sort_order', { ascending: true }).order('name');
     return (data ?? []).map((s: any) => ({
       id: s.id, name: s.name, description: s.description, price: s.price,
       durationMinutes: s.duration_minutes, category: s.category,
       imageUrl: s.image_url, isActive: s.is_active,
+      sortOrder: s.sort_order ?? 0,
       variations: s.variations ?? [],
     }));
+  },
+
+  async reorderServices(items: { id: string; sortOrder: number }[]) {
+    if (!hasSupabase) return;
+    await Promise.all(
+      items.map(({ id, sortOrder }) =>
+        supabase.from('services').update({ sort_order: sortOrder }).eq('id', id)
+      )
+    );
   },
 
   async createService(input: any) {

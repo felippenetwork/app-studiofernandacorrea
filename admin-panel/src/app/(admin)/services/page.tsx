@@ -4,7 +4,22 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Pencil, Trash2, Loader2, Search, X, ChevronDown, ChevronUp, Layers } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { Plus, Pencil, Trash2, Loader2, Search, X, ChevronDown, ChevronUp, Layers, GripVertical } from 'lucide-react';
 import { servicesApi } from '@/lib/api';
 import { Service, ServiceVariation } from '@/types';
 import { formatCurrency, formatDuration } from '@/lib/formatters';
@@ -35,11 +50,9 @@ function VariationEditor({
   function add() {
     onChange([...variations, { id: `var-${Date.now()}`, name: '', price: 0 }]);
   }
-
   function remove(id: string) {
     onChange(variations.filter((v) => v.id !== id));
   }
-
   function update(id: string, field: keyof ServiceVariation, value: any) {
     onChange(variations.map((v) => (v.id === id ? { ...v, [field]: value } : v)));
   }
@@ -67,14 +80,12 @@ function VariationEditor({
 
       {variations.length > 0 && (
         <div className="space-y-2">
-          {/* Header labels */}
           <div className="grid grid-cols-[1fr_100px_72px_28px] gap-2 px-1">
             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Nome</span>
             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Preço (R$)</span>
             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Min.</span>
             <span />
           </div>
-
           {variations.map((v) => (
             <div key={v.id} className="grid grid-cols-[1fr_100px_72px_28px] gap-2 items-center bg-gray-50 rounded-lg px-2 py-2">
               <input
@@ -84,24 +95,20 @@ function VariationEditor({
                 className="h-8 px-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#C9A4A0] bg-white"
               />
               <input
-                type="number"
-                step="0.01"
-                min="0"
+                type="number" step="0.01" min="0"
                 value={v.price}
                 onChange={(e) => update(v.id, 'price', Number(e.target.value))}
                 className="h-8 px-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#C9A4A0] bg-white"
               />
               <input
-                type="number"
-                min="1"
+                type="number" min="1"
                 value={v.durationMinutes ?? ''}
                 onChange={(e) => update(v.id, 'durationMinutes', e.target.value ? Number(e.target.value) : undefined)}
                 placeholder="—"
                 className="h-8 px-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#C9A4A0] bg-white"
               />
               <button
-                type="button"
-                onClick={() => remove(v.id)}
+                type="button" onClick={() => remove(v.id)}
                 className="w-7 h-7 flex items-center justify-center rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
               >
                 <X className="w-3.5 h-3.5" />
@@ -114,12 +121,10 @@ function VariationEditor({
   );
 }
 
-// ─── Price display helper ─────────────────────────────────────────────────────
+// ─── Price display ────────────────────────────────────────────────────────────
 
 function PriceCell({ service }: { service: Service }) {
-  if (!service.variations?.length) {
-    return <span>{formatCurrency(service.price)}</span>;
-  }
+  if (!service.variations?.length) return <span>{formatCurrency(service.price)}</span>;
   const prices = service.variations.map((v) => v.price);
   const min = Math.min(...prices);
   const max = Math.max(...prices);
@@ -131,13 +136,12 @@ function PriceCell({ service }: { service: Service }) {
   );
 }
 
-// ─── Expandable variations row ────────────────────────────────────────────────
+// ─── Expandable variations badge ──────────────────────────────────────────────
 
 function VariationsBadge({ service }: { service: Service }) {
   const [open, setOpen] = useState(false);
   const count = service.variations?.length ?? 0;
   if (count === 0) return null;
-
   return (
     <div className="mt-0.5">
       <button
@@ -170,6 +174,74 @@ function VariationsBadge({ service }: { service: Service }) {
   );
 }
 
+// ─── Sortable row ─────────────────────────────────────────────────────────────
+
+function SortableRow({
+  service,
+  onEdit,
+  onDelete,
+  isDragging,
+}: {
+  service: Service;
+  onEdit: (s: Service) => void;
+  onDelete: (id: string) => void;
+  isDragging: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: service.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  return (
+    <tr
+      ref={setNodeRef}
+      style={style}
+      className={cn('hover:bg-gray-50/50', isDragging && 'bg-white shadow-lg')}
+    >
+      {/* Drag handle */}
+      <td className="pl-3 pr-1 py-3.5 w-8">
+        <button
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing p-1 rounded text-gray-300 hover:text-gray-500 hover:bg-gray-100 transition-colors touch-none"
+          title="Arrastar para reordenar"
+        >
+          <GripVertical className="w-4 h-4" />
+        </button>
+      </td>
+      <td className="px-4 py-3.5">
+        <p className="font-medium text-gray-900">{service.name}</p>
+        <VariationsBadge service={service} />
+      </td>
+      <td className="px-4 py-3.5 text-gray-600 capitalize">{service.category}</td>
+      <td className="px-4 py-3.5 text-gray-900"><PriceCell service={service} /></td>
+      <td className="px-4 py-3.5 text-gray-600">{formatDuration(service.durationMinutes)}</td>
+      <td className="px-4 py-3.5">
+        <span className={cn(
+          'px-2 py-0.5 rounded-full text-xs font-medium',
+          service.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+        )}>
+          {service.isActive ? 'Ativo' : 'Inativo'}
+        </span>
+      </td>
+      <td className="px-4 py-3.5">
+        <div className="flex items-center gap-2 justify-end">
+          <button onClick={() => onEdit(service)} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700">
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={() => onDelete(service.id)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ServicesPage() {
@@ -180,6 +252,11 @@ export default function ServicesPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [variations, setVariations] = useState<ServiceVariation[]>([]);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
 
   const { data: services = [], isLoading } = useQuery<Service[]>({
     queryKey: ['admin-services'],
@@ -205,6 +282,10 @@ export default function ServicesPage() {
   const deleteMutation = useMutation({
     mutationFn: servicesApi.remove,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-services'] }); setDeleteId(null); },
+  });
+
+  const reorderMutation = useMutation({
+    mutationFn: (items: { id: string; sortOrder: number }[]) => servicesApi.reorder(items),
   });
 
   function openCreate() {
@@ -240,10 +321,57 @@ export default function ServicesPage() {
     }
   };
 
-  const filtered = services.filter((s) =>
-    s.name.toLowerCase().includes(search.toLowerCase()) ||
-    s.category.toLowerCase().includes(search.toLowerCase())
-  );
+  // ── Drag & drop ────────────────────────────────────────────────────────────
+
+  // When searching, disable reorder (list is filtered)
+  const isFiltering = search.trim().length > 0;
+
+  // Local ordered list (used as source of truth while not filtering)
+  const [localOrder, setLocalOrder] = useState<string[] | null>(null);
+
+  const orderedServices = (() => {
+    if (isFiltering) {
+      return services.filter((s) =>
+        s.name.toLowerCase().includes(search.toLowerCase()) ||
+        s.category.toLowerCase().includes(search.toLowerCase())
+      );
+    }
+    if (localOrder) {
+      const map = new Map(services.map((s) => [s.id, s]));
+      return localOrder.map((id) => map.get(id)).filter(Boolean) as Service[];
+    }
+    return [...services].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  })();
+
+  function handleDragStart(event: any) {
+    setDraggingId(String(event.active.id));
+    // Snapshot current order if not yet set
+    if (!localOrder) {
+      setLocalOrder(orderedServices.map((s) => s.id));
+    }
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setDraggingId(null);
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const current = localOrder ?? orderedServices.map((s) => s.id);
+    const oldIndex = current.indexOf(String(active.id));
+    const newIndex = current.indexOf(String(over.id));
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(current, oldIndex, newIndex);
+    setLocalOrder(reordered);
+
+    // Persist to backend
+    const items = reordered.map((id, i) => ({ id, sortOrder: i }));
+    reorderMutation.mutate(items, {
+      onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-services'] }),
+    });
+  }
+
+  const displayList = orderedServices;
 
   return (
     <div className="space-y-6">
@@ -251,7 +379,7 @@ export default function ServicesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Serviços ({services.length})</h2>
-          <p className="text-sm text-gray-500">Gerencie os serviços oferecidos pelo studio.</p>
+          <p className="text-sm text-gray-500">Arraste para reordenar. A ordem reflete no app.</p>
         </div>
         <button onClick={openCreate} className="flex items-center gap-2 bg-[#C9A4A0] hover:bg-[#b8918d] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
           <Plus className="w-4 h-4" /> Novo serviço
@@ -259,14 +387,24 @@ export default function ServicesPage() {
       </div>
 
       {/* Search */}
-      <div className="relative max-w-xs">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar serviço…"
-          className="w-full pl-9 pr-3 h-9 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]"
-        />
+      <div className="flex items-center gap-3">
+        <div className="relative max-w-xs flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar serviço…"
+            className="w-full pl-9 pr-3 h-9 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]"
+          />
+        </div>
+        {reorderMutation.isPending && (
+          <span className="flex items-center gap-1.5 text-xs text-gray-400">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Salvando ordem…
+          </span>
+        )}
+        {isFiltering && (
+          <span className="text-xs text-gray-400 italic">Arrastar desabilitado durante a busca</span>
+        )}
       </div>
 
       {/* Table */}
@@ -275,7 +413,7 @@ export default function ServicesPage() {
           <div className="p-8 text-center">
             <Loader2 className="w-6 h-6 animate-spin text-[#C9A4A0] mx-auto" />
           </div>
-        ) : filtered.length === 0 ? (
+        ) : displayList.length === 0 ? (
           <div className="p-12 text-center text-gray-400">
             <p className="text-sm">Nenhum serviço encontrado.</p>
           </div>
@@ -283,7 +421,8 @@ export default function ServicesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/60">
-                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Nome</th>
+                <th className="w-8 pl-3" />
+                <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Nome</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Categoria</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Preço</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Duração</th>
@@ -291,39 +430,30 @@ export default function ServicesPage() {
                 <th className="px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtered.map((s) => (
-                <tr key={s.id} className="hover:bg-gray-50/50">
-                  <td className="px-5 py-3.5">
-                    <p className="font-medium text-gray-900">{s.name}</p>
-                    <VariationsBadge service={s} />
-                  </td>
-                  <td className="px-4 py-3.5 text-gray-600 capitalize">{s.category}</td>
-                  <td className="px-4 py-3.5 text-gray-900">
-                    <PriceCell service={s} />
-                  </td>
-                  <td className="px-4 py-3.5 text-gray-600">{formatDuration(s.durationMinutes)}</td>
-                  <td className="px-4 py-3.5">
-                    <span className={cn(
-                      'px-2 py-0.5 rounded-full text-xs font-medium',
-                      s.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                    )}>
-                      {s.isActive ? 'Ativo' : 'Inativo'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center gap-2 justify-end">
-                      <button onClick={() => openEdit(s)} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700">
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={() => setDeleteId(s.id)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={displayList.map((s) => s.id)}
+                strategy={verticalListSortingStrategy}
+                disabled={isFiltering}
+              >
+                <tbody className="divide-y divide-gray-50">
+                  {displayList.map((s) => (
+                    <SortableRow
+                      key={s.id}
+                      service={s}
+                      onEdit={openEdit}
+                      onDelete={setDeleteId}
+                      isDragging={draggingId === s.id}
+                    />
+                  ))}
+                </tbody>
+              </SortableContext>
+            </DndContext>
           </table>
         )}
       </div>
@@ -380,7 +510,6 @@ export default function ServicesPage() {
                 <input {...register('imageUrl')} type="url" className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]" />
               </div>
 
-              {/* Variations editor */}
               <div className="border-t border-gray-100 pt-4">
                 <VariationEditor variations={variations} onChange={setVariations} />
               </div>

@@ -46,6 +46,7 @@ export interface Service {
   imageUrl?: string;
   isActive: boolean;
   bookingFeeApplicable: boolean;
+  sortOrder: number;
   variations: ServiceVariation[];
 }
 

@@ -52,6 +52,8 @@ export const servicesApi = {
   create: (data: any) => apiClient.post('/admin/services', data).then((r) => r.data.data),
   update: (id: string, data: any) => apiClient.put(`/admin/services/${id}`, data).then((r) => r.data.data),
   remove: (id: string) => apiClient.delete(`/admin/services/${id}`),
+  reorder: (items: { id: string; sortOrder: number }[]) =>
+    apiClient.patch('/admin/services/reorder', { items }).then((r) => r.data),
 };
 
 // ─── Professionals ────────────────────────────────────────────────────────────
