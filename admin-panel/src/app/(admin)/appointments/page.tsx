@@ -1,24 +1,24 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CalendarDays, Plus, Loader2, X, Clock, User, Scissors, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarDays, Plus, Loader2, X, Clock, User, Scissors, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import { appointmentsAdminApi, servicesApi, professionalsApi, customersApi } from '@/lib/api';
 import { Appointment, Paginated, Service, Professional, Customer } from '@/types';
-import { getErrorMessage } from '@/lib/utils';
+import { getErrorMessage, cn } from '@/lib/utils';
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  confirmado:          { label: 'Confirmado',        color: 'bg-green-100 text-green-700' },
-  pendente_pagamento:  { label: 'Pend. Pagamento',   color: 'bg-amber-100 text-amber-700' },
-  cancelado:           { label: 'Cancelado',          color: 'bg-red-100 text-red-700' },
-  concluido:           { label: 'Concluído',          color: 'bg-blue-100 text-blue-700' },
-  nao_compareceu:      { label: 'Não compareceu',     color: 'bg-gray-100 text-gray-600' },
+  confirmado:         { label: 'Confirmado',       color: 'bg-green-100 text-green-700' },
+  pendente_pagamento: { label: 'Pend. Pagamento',  color: 'bg-amber-100 text-amber-700' },
+  cancelado:          { label: 'Cancelado',         color: 'bg-red-100 text-red-700' },
+  concluido:          { label: 'Concluído',         color: 'bg-blue-100 text-blue-700' },
+  nao_compareceu:     { label: 'Não compareceu',    color: 'bg-gray-100 text-gray-600' },
 };
 
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-interface NewAppointmentForm {
+interface NewApptForm {
   userId: string;
   serviceId: string;
   professionalId: string;
@@ -28,24 +28,83 @@ interface NewAppointmentForm {
   notes: string;
 }
 
-function NewAppointmentModal({
-  onClose,
-  onSuccess,
+// ─── Slot Picker ──────────────────────────────────────────────────────────────
+
+function SlotPicker({
+  professionalId, serviceId, date,
+  selected, onSelect,
 }: {
-  onClose: () => void;
-  onSuccess: () => void;
+  professionalId: string; serviceId: string; date: string;
+  selected: string; onSelect: (time: string) => void;
 }) {
-  const [form, setForm] = useState<NewAppointmentForm>({
+  const { data: slots, isLoading, isError } = useQuery({
+    queryKey: ['trinks-slots', professionalId, serviceId, date],
+    queryFn: () => appointmentsAdminApi.availableSlots(professionalId, serviceId, date),
+    enabled: !!(professionalId && serviceId && date),
+    staleTime: 60_000,
+  });
+
+  if (!professionalId || !serviceId || !date) {
+    return (
+      <p className="text-xs text-gray-400 italic">Selecione profissional, serviço e data para ver os horários.</p>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-gray-500">
+        <Loader2 className="w-4 h-4 animate-spin text-[#C9A4A0]" />
+        Buscando horários disponíveis…
+      </div>
+    );
+  }
+
+  if (isError || !slots?.length) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
+        <AlertCircle className="w-4 h-4 flex-shrink-0" />
+        Nenhum horário disponível para esta data.
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-4 gap-1.5">
+      {slots.map((slot) => (
+        <button
+          key={slot.time}
+          type="button"
+          disabled={!slot.available}
+          onClick={() => slot.available && onSelect(slot.time)}
+          className={cn(
+            'h-9 rounded-lg text-sm font-medium transition-all',
+            !slot.available
+              ? 'bg-gray-100 text-gray-300 cursor-not-allowed line-through'
+              : selected === slot.time
+              ? 'bg-[#C9A4A0] text-white shadow-sm'
+              : 'border border-gray-200 text-gray-700 hover:border-[#C9A4A0] hover:text-[#C9A4A0]'
+          )}
+        >
+          {slot.time}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── New Appointment Modal ────────────────────────────────────────────────────
+
+function NewAppointmentModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [form, setForm] = useState<NewApptForm>({
     userId: '', serviceId: '', professionalId: '',
-    appointmentDate: today(), appointmentTime: '09:00',
+    appointmentDate: today(), appointmentTime: '',
     status: 'confirmado', notes: '',
   });
   const [error, setError] = useState<string | null>(null);
 
-  const { data: customers = [] } = useQuery<Paginated<Customer>>({
+  const { data: customersPage } = useQuery<Paginated<Customer>>({
     queryKey: ['admin-customers-modal'],
     queryFn: () => customersApi.list({ limit: 200 }),
-    select: (d) => d,
   });
   const { data: services = [] } = useQuery<Service[]>({
     queryKey: ['admin-services'],
@@ -56,40 +115,44 @@ function NewAppointmentModal({
     queryFn: professionalsApi.list,
   });
 
-  const selectedService = services.find((s) => s.id === form.serviceId);
-
   const mutation = useMutation({
-    mutationFn: () => appointmentsAdminApi.create({
-      userId: form.userId,
-      serviceId: form.serviceId,
-      professionalId: form.professionalId,
-      appointmentDate: form.appointmentDate,
-      appointmentTime: form.appointmentTime,
-      status: form.status,
-      servicePrice: selectedService?.price,
-      notes: form.notes || undefined,
-    }),
+    mutationFn: () => {
+      const svc = services.find((s) => s.id === form.serviceId);
+      return appointmentsAdminApi.create({
+        userId: form.userId,
+        serviceId: form.serviceId,
+        professionalId: form.professionalId,
+        appointmentDate: form.appointmentDate,
+        appointmentTime: form.appointmentTime,
+        status: form.status,
+        servicePrice: svc?.price,
+        notes: form.notes || undefined,
+      });
+    },
     onSuccess: () => { onSuccess(); onClose(); },
     onError: (e) => setError(getErrorMessage(e)),
   });
 
-  function set<K extends keyof NewAppointmentForm>(field: K, value: NewAppointmentForm[K]) {
-    setForm((p) => ({ ...p, [field]: value }));
+  function set<K extends keyof NewApptForm>(field: K, value: NewApptForm[K]) {
+    setForm((p) => {
+      const next = { ...p, [field]: value };
+      // Reset time when date/service/professional changes
+      if (['serviceId', 'professionalId', 'appointmentDate'].includes(field as string)) {
+        next.appointmentTime = '';
+      }
+      return next;
+    });
     setError(null);
   }
 
-  const customerList = (customers as any)?.items ?? [];
+  const customers = customersPage?.items ?? [];
+  const activeServices = services.filter((s) => s.isActive);
+  const activeProfessionals = professionals.filter((p) => p.isActive);
   const isValid = form.userId && form.serviceId && form.professionalId && form.appointmentDate && form.appointmentTime;
-
-  const timeSlots = Array.from({ length: 22 }, (_, i) => {
-    const h = Math.floor(i / 2) + 8;
-    const m = i % 2 === 0 ? '00' : '30';
-    return `${String(h).padStart(2, '0')}:${m}`;
-  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[92vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h3 className="font-semibold text-gray-900">Novo Agendamento</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
@@ -111,7 +174,7 @@ function NewAppointmentModal({
               className="w-full h-9 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0] bg-white"
             >
               <option value="">Selecione a cliente…</option>
-              {customerList.map((c: Customer) => (
+              {customers.map((c) => (
                 <option key={c.id} value={c.id}>{c.name} — {c.email}</option>
               ))}
             </select>
@@ -126,7 +189,7 @@ function NewAppointmentModal({
               className="w-full h-9 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0] bg-white"
             >
               <option value="">Selecione o serviço…</option>
-              {services.filter((s) => s.isActive).map((s) => (
+              {activeServices.map((s) => (
                 <option key={s.id} value={s.id}>{s.name} — R$ {s.price.toFixed(2)}</option>
               ))}
             </select>
@@ -141,36 +204,36 @@ function NewAppointmentModal({
               className="w-full h-9 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0] bg-white"
             >
               <option value="">Selecione a profissional…</option>
-              {professionals.filter((p) => p.isActive).map((p) => (
+              {activeProfessionals.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
           </div>
 
-          {/* Data e Horário */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-600">Data *</label>
-              <input
-                type="date"
-                value={form.appointmentDate}
-                onChange={(e) => set('appointmentDate', e.target.value)}
-                min={today()}
-                className="w-full h-9 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-gray-600">Horário *</label>
-              <select
-                value={form.appointmentTime}
-                onChange={(e) => set('appointmentTime', e.target.value)}
-                className="w-full h-9 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0] bg-white"
-              >
-                {timeSlots.map((t) => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
-              </select>
-            </div>
+          {/* Data */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-600">Data *</label>
+            <input
+              type="date"
+              value={form.appointmentDate}
+              min={today()}
+              onChange={(e) => set('appointmentDate', e.target.value)}
+              className="w-full h-9 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]"
+            />
+          </div>
+
+          {/* Horários via Trinks */}
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-gray-600">
+              Horário * {form.appointmentTime && <span className="text-[#C9A4A0] font-semibold">{form.appointmentTime} selecionado</span>}
+            </label>
+            <SlotPicker
+              professionalId={form.professionalId}
+              serviceId={form.serviceId}
+              date={form.appointmentDate}
+              selected={form.appointmentTime}
+              onSelect={(t) => setForm((p) => ({ ...p, appointmentTime: t }))}
+            />
           </div>
 
           {/* Status */}
@@ -220,13 +283,12 @@ function NewAppointmentModal({
   );
 }
 
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 function formatDateTime(date: string, time: string) {
   try {
-    const d = new Date(`${date}T${time}`);
-    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) + ' às ' + time;
-  } catch {
-    return `${date} ${time}`;
-  }
+    return new Date(`${date}T${time}`).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) + ' às ' + time;
+  } catch { return `${date} ${time}`; }
 }
 
 export default function AppointmentsPage() {

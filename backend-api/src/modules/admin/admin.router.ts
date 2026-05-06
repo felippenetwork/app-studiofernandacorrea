@@ -4,6 +4,7 @@ import { validate } from '../../middleware/validate.middleware';
 import { adminAuthMiddleware, requireRole } from '../../middleware/adminAuth.middleware';
 import { adminService } from './admin.service';
 import { adminAuthService } from '../admin-auth/admin-auth.service';
+import { trinksService } from '../trinks/trinks.service';
 
 export const adminRouter = Router();
 
@@ -179,6 +180,21 @@ adminRouter.delete('/benefits/:id', requireRole('owner', 'gerente'), async (req:
 });
 
 // ─── Appointments ─────────────────────────────────────────────────────────────
+
+// GET /api/admin/appointments/available-slots — proxy to Trinks (must be before /:id routes)
+adminRouter.get('/appointments/available-slots', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { professionalId, serviceId, date } = req.query as Record<string, string>;
+    if (!professionalId || !serviceId || !date) {
+      res.status(400).json({ error: 'BadRequest', message: 'professionalId, serviceId e date são obrigatórios.' });
+      return;
+    }
+    const slots = await trinksService.getAvailableSlots(professionalId, serviceId, date);
+    res.json({ data: slots });
+  } catch (err) {
+    res.status(500).json({ error: 'InternalError', message: (err as Error).message });
+  }
+});
 
 adminRouter.get('/appointments', async (req: Request, res: Response): Promise<void> => {
   try {

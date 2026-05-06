@@ -341,8 +341,10 @@ export const adminService = {
   },
 
   async createAppointment(input: any) {
+    let result: any;
+
     if (!hasSupabase) {
-      return {
+      result = {
         id: `apt-${Date.now()}`,
         user_id: input.userId, service_id: input.serviceId,
         professional_id: input.professionalId,
@@ -353,18 +355,24 @@ export const adminService = {
         payment_status: 'pendente', notes: input.notes ?? null,
         created_at: new Date().toISOString(),
       };
+    } else {
+      const { data, error } = await supabase.from('appointments').insert({
+        user_id: input.userId, service_id: input.serviceId,
+        professional_id: input.professionalId,
+        appointment_date: input.appointmentDate, appointment_time: input.appointmentTime,
+        status: input.status ?? 'confirmado',
+        service_price: input.servicePrice ?? 0, booking_fee: input.bookingFee ?? 0,
+        remaining_amount: input.remainingAmount ?? (input.servicePrice ?? 0) - (input.bookingFee ?? 0),
+        payment_status: 'pendente', notes: input.notes,
+      }).select().single();
+      if (error) throw new Error(error.message);
+      result = data;
     }
-    const { data, error } = await supabase.from('appointments').insert({
-      user_id: input.userId, service_id: input.serviceId,
-      professional_id: input.professionalId,
-      appointment_date: input.appointmentDate, appointment_time: input.appointmentTime,
-      status: input.status ?? 'confirmado',
-      service_price: input.servicePrice ?? 0, booking_fee: input.bookingFee ?? 0,
-      remaining_amount: input.remainingAmount ?? (input.servicePrice ?? 0) - (input.bookingFee ?? 0),
-      payment_status: 'pendente', notes: input.notes,
-    }).select().single();
-    if (error) throw new Error(error.message);
-    return data;
+
+    // Non-blocking sync to Trinks (works even in mock/no-DB mode)
+    setImmediate(() => _syncAdminApptToTrinks(result.id, input));
+
+    return result;
   },
 
   // ─── Payments (admin view) ───────────────────────────────────────────────────
@@ -634,3 +642,41 @@ export const adminService = {
     };
   },
 };
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+async function _syncAdminApptToTrinks(appointmentId: string, input: any): Promise<void> {
+  try {
+    const { trinksService } = await import('../trinks/trinks.service');
+
+    let clientName: string | undefined;
+    let clientEmail: string | undefined;
+    let clientPhone: string | undefined;
+
+    if (hasSupabase && input.userId) {
+      const { supabase: db } = await import('../../config/supabase');
+      const { data: user } = await db.from('users').select('name,email,phone').eq('id', input.userId).maybeSingle();
+      if (user) { clientName = user.name; clientEmail = user.email; clientPhone = user.phone; }
+    }
+
+    const trinksResult = await trinksService.createAppointment({
+      serviceId: input.serviceId,
+      professionalId: input.professionalId,
+      date: input.appointmentDate,
+      time: input.appointmentTime,
+      clientName,
+      clientEmail,
+      clientPhone,
+      notes: input.notes,
+    });
+
+    if (trinksResult.id && hasSupabase) {
+      const { supabase: db } = await import('../../config/supabase');
+      await db.from('appointments').update({ trinks_appointment_id: trinksResult.id }).eq('id', appointmentId);
+    }
+
+    console.log(`[admin-appointment] Trinks sync ok: ${trinksResult.id ?? 'mock'}`);
+  } catch (err) {
+    console.error('[admin-appointment] Trinks sync failed:', (err as Error).message);
+  }
+}

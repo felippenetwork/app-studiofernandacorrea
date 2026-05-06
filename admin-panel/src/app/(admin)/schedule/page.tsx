@@ -2,9 +2,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { Save, Loader2, Calendar } from 'lucide-react';
+import { Save, Loader2, Calendar, Info, ExternalLink } from 'lucide-react';
 import { settingsApi } from '@/lib/api';
-import { ScheduleSettings } from '@/types';
+import { ScheduleSettings, IntegrationSettings } from '@/types';
 import { getErrorMessage } from '@/lib/utils';
 
 const DAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
@@ -18,6 +18,13 @@ export default function SchedulePage() {
     queryKey: ['settings', 'schedule'],
     queryFn: () => settingsApi.get('schedule'),
   });
+
+  const { data: integrations } = useQuery<IntegrationSettings>({
+    queryKey: ['settings', 'integrations'],
+    queryFn: () => settingsApi.get('integrations'),
+  });
+
+  const trinksEnabled = integrations?.trinksEnabled;
 
   const { register, handleSubmit, formState: { isSubmitting } } = useForm<ScheduleSettings>({ values: data ?? undefined });
 
@@ -38,6 +45,29 @@ export default function SchedulePage() {
           <p className="text-sm text-gray-500">Taxas, políticas e horários de funcionamento.</p>
         </div>
       </div>
+
+      {/* Trinks banner */}
+      {trinksEnabled && (
+        <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-100 rounded-xl">
+          <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-blue-900">Agenda sincronizada com o Trinks</p>
+            <p className="text-xs text-blue-700 mt-0.5">
+              Horários disponíveis, serviços e profissionais são gerenciados pelo Trinks e sincronizados automaticamente a cada 6 horas.
+              Para alterar a disponibilidade de um profissional ou bloquear datas, acesse o painel do Trinks.
+            </p>
+          </div>
+          <a
+            href="https://app.trinks.com.br"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium whitespace-nowrap mt-0.5"
+          >
+            Abrir Trinks
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+      )}
 
       {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
       {saved && <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">✓ Configurações salvas!</div>}

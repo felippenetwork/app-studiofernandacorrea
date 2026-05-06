@@ -97,6 +97,8 @@ export const appointmentsAdminApi = {
   list: (params?: { date?: string; status?: string; page?: number; limit?: number }) =>
     apiClient.get('/admin/appointments', { params }).then((r) => r.data.data),
   create: (data: any) => apiClient.post('/admin/appointments', data).then((r) => r.data.data),
+  availableSlots: (professionalId: string, serviceId: string, date: string) =>
+    apiClient.get('/admin/appointments/available-slots', { params: { professionalId, serviceId, date } }).then((r) => r.data.data as { time: string; available: boolean }[]),
 };
 
 // ─── Payments ─────────────────────────────────────────────────────────────────
