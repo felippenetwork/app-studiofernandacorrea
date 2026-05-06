@@ -58,6 +58,29 @@ export const emailService = {
     });
   },
 
+  async sendPasswordReset(to: string, name: string, token: string): Promise<void> {
+    if (!transporter || !env.API_BASE_URL) return;
+    const resetUrl = `${env.API_BASE_URL}/auth/reset-password?token=${token}`;
+    await transporter.sendMail({
+      from: FROM,
+      to,
+      subject: 'Recuperação de senha — Studio Fernanda Correa',
+      html: baseTemplate(`
+        <h2 style="color:#111827;font-size:18px;margin-top:0;">Olá, ${name}!</h2>
+        <p style="color:#6b7280;line-height:1.6;">Recebemos uma solicitação para redefinir a senha da sua conta. Clique no botão abaixo para criar uma nova senha:</p>
+        <div style="text-align:center;margin:32px 0;">
+          <a href="${resetUrl}" style="background:#C9A4A0;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block;">
+            Redefinir senha
+          </a>
+        </div>
+        <p style="color:#9ca3af;font-size:13px;line-height:1.5;">
+          Se você não solicitou a recuperação de senha, ignore este e-mail — sua senha não será alterada.<br/>
+          O link expira em 1 hora.
+        </p>
+      `),
+    });
+  },
+
   async sendWelcome(to: string, name: string): Promise<void> {
     if (!transporter) return;
     await transporter.sendMail({

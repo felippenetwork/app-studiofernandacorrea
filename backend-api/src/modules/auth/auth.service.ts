@@ -199,6 +199,58 @@ export const authService = {
     await emailService.sendEmailVerification(email, (user as any).name, newToken);
   },
 
+  async forgotPassword(email: string) {
+    if (!hasSupabase) throw new Error('Recuperação de senha não disponível em modo dev.');
+    if (!emailService.hasSmtp) throw new Error('Serviço de e-mail não configurado.');
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('id, name, email, is_active')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (!user) throw new Error('E-mail não encontrado. Verifique o endereço informado.');
+    if (!(user as any).is_active) throw new Error('Conta não ativada. Verifique seu e-mail para confirmar o cadastro.');
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hora
+
+    await supabase
+      .from('users')
+      .update({ password_reset_token: token, password_reset_expires_at: expiresAt })
+      .eq('id', (user as any).id);
+
+    emailService
+      .sendPasswordReset(email, (user as any).name, token)
+      .catch(console.error);
+  },
+
+  async resetPassword(token: string, newPassword: string) {
+    if (!hasSupabase) throw new Error('Recuperação de senha não disponível em modo dev.');
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('id, password_reset_expires_at')
+      .eq('password_reset_token', token)
+      .maybeSingle();
+
+    if (!user) throw new Error('Link inválido ou expirado.');
+
+    const expiresAt = new Date((user as any).password_reset_expires_at).getTime();
+    if (Date.now() > expiresAt) throw new Error('Link inválido ou expirado.');
+
+    const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+    await supabase
+      .from('users')
+      .update({
+        password_hash: passwordHash,
+        password_reset_token: null,
+        password_reset_expires_at: null,
+      })
+      .eq('id', (user as any).id);
+  },
+
   async getUserById(id: string) {
     if (!hasSupabase) {
       const user = mockUsers.find((u) => u.id === id);

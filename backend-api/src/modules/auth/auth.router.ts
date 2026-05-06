@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { z } from 'zod';
 import { authController } from './auth.controller';
 import { validate } from '../../middleware/validate.middleware';
@@ -21,6 +21,23 @@ authRouter.post(
   '/resend-verification',
   validate(z.object({ email: z.string().email() })),
   authController.resendVerification
+);
+
+// POST /api/auth/forgot-password
+authRouter.post(
+  '/forgot-password',
+  validate(z.object({ email: z.string().email() })),
+  authController.forgotPassword
+);
+
+// GET /api/auth/reset-password?token=xxx  — formulário HTML
+authRouter.get('/reset-password', authController.resetPasswordForm);
+
+// POST /api/auth/reset-password  — submit do formulário HTML
+authRouter.post(
+  '/reset-password',
+  express.urlencoded({ extended: false }),
+  authController.resetPassword
 );
 
 // POST /api/auth/refresh
