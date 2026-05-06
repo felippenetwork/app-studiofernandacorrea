@@ -1,4 +1,5 @@
 export { Button } from './Button';
+export { ErrorBoundary } from './ErrorBoundary';
 export { Card } from './Card';
 export { Input } from './Input';
 export { Avatar } from './Avatar';

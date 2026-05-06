@@ -22,6 +22,7 @@ import {
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { AppNavigator } from './src/navigation/AppNavigator';
+import { ErrorBoundary } from './src/components/common/ErrorBoundary';
 import { colors } from './src/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -60,18 +61,20 @@ export default function App() {
   }
 
   return (
-    <GestureHandlerRootView style={styles.root}>
-      <SafeAreaProvider>
-        <QueryClientProvider client={queryClient}>
-          <NavigationContainer>
-            <View style={styles.root} onLayout={onLayoutRootView}>
-              <StatusBar style="dark" backgroundColor={colors.background} />
-              <AppNavigator />
-            </View>
-          </NavigationContainer>
-        </QueryClientProvider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={styles.root}>
+        <SafeAreaProvider>
+          <QueryClientProvider client={queryClient}>
+            <NavigationContainer>
+              <View style={styles.root} onLayout={onLayoutRootView}>
+                <StatusBar style="dark" backgroundColor={colors.background} />
+                <AppNavigator />
+              </View>
+            </NavigationContainer>
+          </QueryClientProvider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }
 
