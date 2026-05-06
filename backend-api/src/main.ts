@@ -91,6 +91,18 @@ app.use('/api/benefits',      benefitsRouter);
 app.use('/api/payments',      paymentsRouter);
 app.use('/api/notifications', notificationsRouter);
 
+// ─── Public services list (no auth) ──────────────────────────────────────────
+// Returns active services with variations for the mobile booking flow
+app.get('/api/services', async (_req, res) => {
+  try {
+    const all = await adminService.listServices();
+    const active = all.filter((s: any) => s.isActive !== false);
+    res.json({ data: active });
+  } catch {
+    res.status(500).json({ error: 'InternalError', message: 'Erro ao carregar serviços.' });
+  }
+});
+
 // ─── Public config (no auth) ──────────────────────────────────────────────────
 // Returns only safe, non-sensitive public settings for the mobile app
 app.get('/api/config/public', async (_req, res) => {

@@ -176,6 +176,7 @@ export interface CreateAppointmentInput {
   professionalId: string;
   appointmentDate: string;
   appointmentTime: string;
+  variationId?: string;
   notes?: string;
 }
 

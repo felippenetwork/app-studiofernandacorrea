@@ -48,7 +48,11 @@ export function ServicesScreen() {
 
   const handleSelect = (service: Service) => {
     selectService(service);
-    navigation.navigate('ProfessionalSelection');
+    if (service.variations && service.variations.length > 0) {
+      navigation.navigate('ServiceVariation');
+    } else {
+      navigation.navigate('ProfessionalSelection');
+    }
   };
 
   const renderService: ListRenderItem<Service> = ({ item }) => (
@@ -68,7 +72,11 @@ export function ServicesScreen() {
         </View>
       </View>
       <View style={styles.serviceRight}>
-        <Text style={styles.servicePrice}>{formatCurrency(item.price)}</Text>
+        <Text style={styles.servicePrice}>
+          {item.variations && item.variations.length > 0
+            ? `a partir de ${formatCurrency(Math.min(...item.variations.map((v) => v.price)))}`
+            : formatCurrency(item.price)}
+        </Text>
         <Ionicons name="chevron-forward" size={18} color={colors.border} />
       </View>
     </TouchableOpacity>

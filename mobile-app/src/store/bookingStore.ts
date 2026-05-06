@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import { BookingFlow, Service, Professional, Coupon } from '../types';
+import { BookingFlow, Service, ServiceVariation, Professional, Coupon } from '../types';
 
 interface BookingState extends BookingFlow {
   // Actions
   selectService: (service: Service) => void;
+  selectVariation: (variation: ServiceVariation) => void;
   selectProfessional: (professional: Professional) => void;
   selectDate: (date: string) => void;
   selectTime: (time: string) => void;
@@ -14,6 +15,7 @@ interface BookingState extends BookingFlow {
 
 const initialState: BookingFlow = {
   selectedService: null,
+  selectedVariation: null,
   selectedProfessional: null,
   selectedDate: null,
   selectedTime: null,
@@ -24,7 +26,10 @@ export const useBookingStore = create<BookingState>((set) => ({
   ...initialState,
 
   selectService: (service) =>
-    set({ selectedService: service, selectedProfessional: null, selectedDate: null, selectedTime: null }),
+    set({ selectedService: service, selectedVariation: null, selectedProfessional: null, selectedDate: null, selectedTime: null }),
+
+  selectVariation: (variation) =>
+    set({ selectedVariation: variation }),
 
   selectProfessional: (professional) =>
     set({ selectedProfessional: professional, selectedTime: null }),

@@ -29,6 +29,7 @@ function mapService(s: any): Service {
     category: s.category ?? 'outros',
     imageUrl: s.image_url ?? undefined,
     isActive: s.is_active ?? true,
+    variations: Array.isArray(s.variations) ? s.variations : undefined,
   };
 }
 
@@ -98,6 +99,7 @@ export const appointmentsService = {
     if (USE_MOCK) {
       await new Promise((r) => setTimeout(r, 1800));
       const { booking, paymentMethod } = payload;
+      const servicePrice = booking.selectedVariation?.price ?? booking.selectedService!.price;
       const appointment: Appointment = {
         id: `apt-${Date.now()}`,
         userId: 'user-1',
@@ -106,9 +108,9 @@ export const appointmentsService = {
         appointmentDate: booking.selectedDate!,
         appointmentTime: booking.selectedTime!,
         status: 'confirmado',
-        servicePrice: booking.selectedService!.price,
+        servicePrice,
         bookingFee: BOOKING_FEE,
-        remainingAmount: booking.selectedService!.price - BOOKING_FEE,
+        remainingAmount: servicePrice - BOOKING_FEE,
         paymentStatus: paymentMethod === 'pix' ? 'pendente' : 'aprovado',
         paymentId: `pay-${Date.now()}`,
         createdAt: new Date().toISOString(),
@@ -130,6 +132,7 @@ export const appointmentsService = {
       professionalId: payload.booking.selectedProfessional?.id,
       appointmentDate: payload.booking.selectedDate,
       appointmentTime: payload.booking.selectedTime,
+      variationId: payload.booking.selectedVariation?.id,
       couponId: payload.booking.selectedCoupon?.id,
     });
     const appointment = mapAppointment(apptData.data);

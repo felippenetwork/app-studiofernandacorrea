@@ -8,10 +8,12 @@ function mapService(s: any): Service {
     name: s.name,
     description: s.description ?? '',
     price: s.price,
-    durationMinutes: s.duration_minutes ?? s.duration ?? 60,
+    // Admin endpoint uses camelCase, Trinks uses snake_case/duration
+    durationMinutes: s.durationMinutes ?? s.duration_minutes ?? s.duration ?? 60,
     category: s.category ?? 'outros',
-    imageUrl: s.image_url ?? undefined,
-    isActive: s.is_active ?? s.active ?? true,
+    imageUrl: s.imageUrl ?? s.image_url ?? undefined,
+    isActive: s.isActive ?? s.is_active ?? s.active ?? true,
+    variations: Array.isArray(s.variations) && s.variations.length > 0 ? s.variations : undefined,
   };
 }
 
@@ -34,7 +36,7 @@ export const servicesService = {
       await new Promise((r) => setTimeout(r, 500));
       return MOCK_SERVICES;
     }
-    const { data } = await apiClient.get('/trinks/services');
+    const { data } = await apiClient.get('/services');
     return (data.data as any[]).map(mapService);
   },
 

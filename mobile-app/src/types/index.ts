@@ -22,7 +22,16 @@ export type ServiceCategory =
   | 'estetica'
   | 'maquiagem'
   | 'sobrancelha'
-  | 'depilacao';
+  | 'depilacao'
+  | 'outros';
+
+export interface ServiceVariation {
+  id: string;
+  name: string;
+  price: number;
+  durationMinutes?: number;
+  description?: string;
+}
 
 export interface Service {
   id: string;
@@ -33,6 +42,7 @@ export interface Service {
   category: ServiceCategory;
   imageUrl?: string;
   isActive: boolean;
+  variations?: ServiceVariation[];
 }
 
 // ─── Professionals ───────────────────────────────────────────────────────────
@@ -170,6 +180,7 @@ export interface AppNotification {
 
 export interface BookingFlow {
   selectedService: Service | null;
+  selectedVariation: ServiceVariation | null;
   selectedProfessional: Professional | null;
   selectedDate: string | null; // ISO "2025-03-20"
   selectedTime: string | null; // "14:30"
@@ -202,6 +213,7 @@ export type MainTabParamList = {
 
 export type BookingStackParamList = {
   Services: undefined;
+  ServiceVariation: undefined;
   ProfessionalSelection: undefined;
   Schedule: undefined;
   TimeSelection: undefined;

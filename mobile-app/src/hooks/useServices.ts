@@ -17,11 +17,11 @@ export function useProfessionals(serviceId?: string) {
   });
 }
 
-export function useAvailableSlots(professionalId: string, date: string) {
+export function useAvailableSlots(professionalId: string, serviceId: string, date: string) {
   return useQuery({
-    queryKey: ['slots', professionalId, date],
-    queryFn: () => servicesService.getAvailableSlots(professionalId, date),
-    enabled: !!professionalId && !!date,
+    queryKey: ['slots', professionalId, serviceId, date],
+    queryFn: () => servicesService.getAvailableSlots(professionalId, serviceId, date),
+    enabled: !!professionalId && !!serviceId && !!date,
     staleTime: 1000 * 60 * 1, // 1 minute — slots change frequently
   });
 }

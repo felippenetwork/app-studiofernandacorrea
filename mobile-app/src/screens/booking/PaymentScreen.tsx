@@ -32,7 +32,7 @@ const PAYMENT_METHODS: { key: PaymentMethod; label: string; icon: string; descri
 export function PaymentScreen() {
   const navigation = useNavigation<Nav>();
   const queryClient = useQueryClient();
-  const { selectedService, selectedProfessional, selectedDate, selectedTime, selectedCoupon, resetBooking } =
+  const { selectedService, selectedVariation, selectedProfessional, selectedDate, selectedTime, selectedCoupon, resetBooking } =
     useBookingStore();
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
   const [pixResult, setPixResult] = useState<{ qrCode?: string; copyPaste?: string } | null>(null);
@@ -41,7 +41,7 @@ export function PaymentScreen() {
   const { mutate: confirmPayment, isPending: loading } = useMutation({
     mutationFn: () =>
       appointmentsService.createAppointment({
-        booking: { selectedService, selectedProfessional, selectedDate, selectedTime, selectedCoupon },
+        booking: { selectedService, selectedVariation, selectedProfessional, selectedDate, selectedTime, selectedCoupon },
         paymentMethod: selectedMethod!,
       }),
     onSuccess: (result: CreateAppointmentResult) => {

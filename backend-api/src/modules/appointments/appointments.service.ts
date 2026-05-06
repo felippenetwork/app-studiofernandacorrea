@@ -26,7 +26,7 @@ export const appointmentsService = {
   },
 
   async create(userId: string, input: CreateAppointmentInput): Promise<DbAppointment> {
-    const servicePrice = await getServicePrice(input.serviceId);
+    const servicePrice = await getServicePrice(input.serviceId, input.variationId);
     const bookingFee = BOOKING_FEE;
     const remainingAmount = servicePrice - bookingFee;
 
@@ -94,7 +94,7 @@ export const appointmentsService = {
 
 // ─── Helper ──────────────────────────────────────────────────────────────────
 
-async function getServicePrice(serviceId: string): Promise<number> {
+async function getServicePrice(serviceId: string, variationId?: string): Promise<number> {
   if (!hasSupabase) {
     const prices: Record<string, number> = {
       '1': 120, '2': 280, '3': 350,
@@ -105,7 +105,14 @@ async function getServicePrice(serviceId: string): Promise<number> {
   }
 
   const { supabase } = await import('../../config/supabase');
-  const { data } = await supabase.from('services').select('price').eq('id', serviceId).single();
+  const { data } = await supabase.from('services').select('price, variations').eq('id', serviceId).single();
   if (!data) throw new Error('Serviço não encontrado.');
-  return (data as { price: number }).price;
+  const row = data as { price: number; variations: { id: string; price: number }[] };
+
+  if (variationId && Array.isArray(row.variations)) {
+    const variation = row.variations.find((v) => v.id === variationId);
+    if (variation) return variation.price;
+  }
+
+  return row.price;
 }

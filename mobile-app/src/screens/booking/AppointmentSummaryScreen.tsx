@@ -14,17 +14,21 @@ type Nav = NativeStackNavigationProp<BookingStackParamList, 'AppointmentSummary'
 
 export function AppointmentSummaryScreen() {
   const navigation = useNavigation<Nav>();
-  const { selectedService, selectedProfessional, selectedDate, selectedTime } = useBookingStore();
+  const { selectedService, selectedVariation, selectedProfessional, selectedDate, selectedTime } = useBookingStore();
 
   if (!selectedService || !selectedProfessional || !selectedDate || !selectedTime) {
     return null;
   }
 
-  const servicePrice = selectedService.price;
+  const servicePrice = selectedVariation?.price ?? selectedService.price;
   const remainingAmount = servicePrice - BOOKING_FEE;
 
+  const serviceName = selectedVariation
+    ? `${selectedService.name} · ${selectedVariation.name}`
+    : selectedService.name;
+
   const infoItems = [
-    { icon: 'cut-outline' as const, label: 'Serviço', value: selectedService.name },
+    { icon: 'cut-outline' as const, label: 'Serviço', value: serviceName },
     { icon: 'person-outline' as const, label: 'Profissional', value: selectedProfessional.name },
     {
       icon: 'calendar-outline' as const,

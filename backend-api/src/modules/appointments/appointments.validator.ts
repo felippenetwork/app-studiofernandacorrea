@@ -5,5 +5,6 @@ export const createAppointmentSchema = z.object({
   professionalId: z.string().uuid('ID de profissional inválido'),
   appointmentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida (use YYYY-MM-DD)'),
   appointmentTime: z.string().regex(/^\d{2}:\d{2}$/, 'Hora inválida (use HH:MM)'),
+  variationId: z.string().optional(),
   notes: z.string().max(500).optional(),
 });
