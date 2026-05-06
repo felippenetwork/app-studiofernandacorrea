@@ -92,6 +92,48 @@ app.use('/api/benefits',      benefitsRouter);
 app.use('/api/payments',      paymentsRouter);
 app.use('/api/notifications', notificationsRouter);
 
+// ─── Public professionals list (no auth) ─────────────────────────────────────
+// Returns active professionals for the mobile booking flow.
+// Uses Supabase as source-of-truth; falls back to Trinks then mock.
+app.get('/api/professionals', async (req, res) => {
+  try {
+    const { serviceId } = req.query as Record<string, string>;
+
+    const all = await adminService.listProfessionals();
+    let active = all.filter((p: any) => p.isActive !== false);
+
+    if (active.length > 0) {
+      res.json({ data: active });
+      return;
+    }
+
+    // Supabase empty — try Trinks
+    try {
+      const { trinksService } = await import('./modules/trinks/trinks.service');
+      const trinksPros = await trinksService.getProfessionals(serviceId);
+      const mapped = trinksPros
+        .filter((p) => p.active !== false)
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          avatarUrl: p.photo ?? undefined,
+          specialties: p.services ?? [],
+          rating: 5.0,
+          reviewCount: 0,
+          isActive: true,
+        }));
+      res.json({ data: mapped });
+    } catch {
+      // Trinks unavailable — use admin mock
+      const { MOCK_PROFESSIONALS } = await import('./modules/admin/admin.service');
+      res.json({ data: (MOCK_PROFESSIONALS as any[]).filter((p) => p.isActive !== false) });
+    }
+  } catch (err) {
+    console.error('[/api/professionals]', err);
+    res.status(500).json({ error: 'InternalError', message: 'Erro ao carregar profissionais.' });
+  }
+});
+
 // ─── Public services list (no auth) ──────────────────────────────────────────
 // Returns active services with variations for the mobile booking flow.
 // Uses Supabase as source-of-truth when populated; falls back to Trinks.

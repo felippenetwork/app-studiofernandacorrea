@@ -15,7 +15,7 @@ export const MOCK_SERVICES = [
   { id: 'svc-4', name: 'Manicure', description: 'Manicure completa', price: 90, durationMinutes: 60, category: 'unhas', isActive: true, imageUrl: undefined, bookingFeeApplicable: true, variations: [] },
 ];
 
-const MOCK_PROFESSIONALS = [
+export const MOCK_PROFESSIONALS = [
   { id: 'pro-1', name: 'Fernanda Correa', avatarUrl: undefined, bio: 'Fundadora do studio', specialties: ['Coloração', 'Mechas'], isActive: true, rating: 5.0, reviewCount: 42 },
   { id: 'pro-2', name: 'Juliana Lima', avatarUrl: undefined, bio: 'Especialista em esmaltação', specialties: ['Manicure', 'Pedicure'], isActive: true, rating: 4.9, reviewCount: 31 },
 ];

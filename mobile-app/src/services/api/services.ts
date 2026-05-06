@@ -46,7 +46,7 @@ export const servicesService = {
       return MOCK_PROFESSIONALS;
     }
     const params = serviceId ? { serviceId } : {};
-    const { data } = await apiClient.get('/trinks/professionals', { params });
+    const { data } = await apiClient.get('/professionals', { params });
     return (data.data as any[]).map(mapProfessional);
   },
 
