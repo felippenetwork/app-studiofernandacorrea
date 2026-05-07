@@ -24,6 +24,22 @@ const MIGRATIONS: Migration[] = [
     name: '006_add_service_booking_fee_config',
     sql: `ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_fee_type TEXT NOT NULL DEFAULT 'fixed', ADD COLUMN IF NOT EXISTS booking_fee_value NUMERIC NOT NULL DEFAULT 40`,
   },
+  {
+    name: '007_create_reviews',
+    sql: `
+      CREATE TABLE IF NOT EXISTS reviews (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        appointment_id UUID UNIQUE NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL,
+        professional_id UUID,
+        rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+        comment TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      ALTER TABLE appointments ADD COLUMN IF NOT EXISTS review_push_sent_at TIMESTAMPTZ;
+    `,
+  },
 ];
 
 export async function runMigrations(): Promise<void> {

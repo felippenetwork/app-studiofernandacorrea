@@ -68,6 +68,15 @@ export const pushService = {
     });
   },
 
+  async reviewRequest(userId: string, serviceName: string): Promise<void> {
+    await pushService.sendToUser(userId, {
+      title: '⭐ Como foi seu atendimento?',
+      body: `Deixe sua avaliação para ${serviceName}. Sua opinião faz a diferença!`,
+      data: { type: 'avaliar_atendimento' },
+      sound: 'default',
+    });
+  },
+
   async newCoupon(userId: string, couponTitle: string, code: string): Promise<void> {
     await pushService.sendToUser(userId, {
       title: '🎁 Novo cupom disponível!',

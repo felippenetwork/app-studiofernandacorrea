@@ -14,6 +14,7 @@ import { paymentsRouter } from './modules/payments/payments.router';
 import { notificationsRouter } from './modules/notifications/notifications.router';
 import { trinksRouter } from './modules/trinks/trinks.router';
 // Admin
+import { reviewsRouter } from './modules/reviews/reviews.router';
 import { adminAuthRouter } from './modules/admin-auth/admin-auth.router';
 import { adminRouter } from './modules/admin/admin.router';
 import { adminNotificationsRouter } from './modules/admin-notifications/admin-notifications.router';
@@ -91,6 +92,7 @@ app.use('/api/coupons',       couponsRouter);
 app.use('/api/benefits',      benefitsRouter);
 app.use('/api/payments',      paymentsRouter);
 app.use('/api/notifications', notificationsRouter);
+app.use('/api/reviews',       reviewsRouter);
 
 // ─── Public professionals list (no auth) ─────────────────────────────────────
 // Returns active professionals for the mobile booking flow.

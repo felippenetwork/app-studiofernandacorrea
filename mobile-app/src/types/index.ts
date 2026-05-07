@@ -231,7 +231,16 @@ export type CouponsStackParamList = {
 export type AppointmentsStackParamList = {
   AppointmentsList: undefined;
   AppointmentDetail: { appointmentId: string };
+  AppointmentReview: { appointmentId: string; serviceName: string };
 };
+
+export interface Review {
+  id: string;
+  appointmentId: string;
+  rating: number;
+  comment?: string;
+  createdAt: string;
+}
 
 export type ProfileStackParamList = {
   ProfileMain: undefined;

@@ -17,6 +17,7 @@ import { AppointmentsStackParamList, AppointmentStatus, PaymentStatus } from '..
 import { colors, textStyles, spacing, borderRadius, shadows } from '../../theme';
 import { Header, Divider } from '../../components/common';
 import { appointmentsService } from '../../services/api/appointments';
+import { reviewsService } from '../../services/api/reviews';
 import {
   formatCurrency,
   formatDateCalendar,
@@ -95,6 +96,12 @@ export function AppointmentDetailScreen() {
     queryFn: () => appointmentsService.getAppointment(params.appointmentId),
   });
 
+  const { data: existingReview } = useQuery({
+    queryKey: ['review', params.appointmentId],
+    queryFn: () => reviewsService.getForAppointment(params.appointmentId),
+    enabled: appointment?.status === 'concluido',
+  });
+
   if (isLoading) {
     return (
       <View style={styles.container}>
@@ -118,7 +125,15 @@ export function AppointmentDetailScreen() {
     );
   }
 
-  const statusMeta = STATUS_META[appointment.status];
+  const isConcluido = appointment.status === 'concluido';
+  const hasReview = !!existingReview;
+
+  const statusMeta = {
+    ...STATUS_META[appointment.status],
+    ...(isConcluido && !hasReview
+      ? { message: 'Atendimento realizado! Que tal deixar sua avaliação?' }
+      : {}),
+  };
   const paymentMeta = PAYMENT_STATUS_META[appointment.paymentStatus];
   const statusColor = appointmentStatusColor(appointment.status);
   const statusLabel = appointmentStatusLabel(appointment.status);
@@ -230,6 +245,48 @@ export function AppointmentDetailScreen() {
             <Text style={styles.cardTitle}>Observações</Text>
             <Divider style={{ marginVertical: spacing[3] }} />
             <Text style={styles.notesText}>{appointment.notes}</Text>
+          </View>
+        )}
+
+        {/* Review — prompt or display */}
+        {isConcluido && !hasReview && (
+          <TouchableOpacity
+            style={styles.reviewPromptCard}
+            onPress={() => navigation.navigate('AppointmentReview', {
+              appointmentId: appointment.id,
+              serviceName: appointment.service.name,
+            })}
+            activeOpacity={0.8}
+          >
+            <View style={styles.reviewPromptLeft}>
+              <Ionicons name="star" size={22} color="#F5A623" />
+              <View style={styles.reviewPromptText}>
+                <Text style={styles.reviewPromptTitle}>Como foi seu atendimento?</Text>
+                <Text style={styles.reviewPromptSub}>Toque para avaliar {appointment.service.name}</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+          </TouchableOpacity>
+        )}
+
+        {isConcluido && hasReview && existingReview && (
+          <View style={styles.reviewCard}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>Sua avaliação</Text>
+              <View style={styles.reviewStarsRow}>
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <Ionicons
+                    key={s}
+                    name={s <= existingReview.rating ? 'star' : 'star-outline'}
+                    size={16}
+                    color={s <= existingReview.rating ? '#F5A623' : colors.border}
+                  />
+                ))}
+              </View>
+            </View>
+            {!!existingReview.comment && (
+              <Text style={styles.reviewComment}>{existingReview.comment}</Text>
+            )}
           </View>
         )}
 
@@ -352,5 +409,37 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     textAlign: 'center',
     marginTop: spacing[2],
+  },
+
+  reviewPromptCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.backgroundCard,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    borderColor: '#F5A623',
+    padding: spacing[4],
+    marginBottom: spacing[4],
+    ...shadows.sm,
+  },
+  reviewPromptLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing[3], flex: 1 },
+  reviewPromptText: { flex: 1 },
+  reviewPromptTitle: { ...textStyles.labelLarge, color: colors.textPrimary },
+  reviewPromptSub: { ...textStyles.caption, color: colors.textTertiary, marginTop: 2 },
+
+  reviewCard: {
+    backgroundColor: colors.backgroundCard,
+    borderRadius: borderRadius.md,
+    padding: spacing[4],
+    marginBottom: spacing[4],
+    ...shadows.sm,
+  },
+  reviewStarsRow: { flexDirection: 'row', gap: 2 },
+  reviewComment: {
+    ...textStyles.bodyMedium,
+    color: colors.textSecondary,
+    lineHeight: 22,
+    marginTop: spacing[3],
   },
 });
