@@ -2,7 +2,7 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { ArrowLeft, Crown, Ban, Calendar, Loader2, Save } from 'lucide-react';
+import { ArrowLeft, Crown, Ban, Calendar, Loader2, Save, Newspaper } from 'lucide-react';
 import { customersApi } from '@/lib/api';
 import { formatDate, formatCurrency, formatRelative } from '@/lib/formatters';
 
@@ -18,12 +18,13 @@ export default function CustomerDetailPage() {
 
   const { register, handleSubmit, formState: { isSubmitting } } = useForm({
     values: data?.customer ? {
-      isVip: data.customer.isVip ?? false,
-      isBlocked: data.customer.isBlocked ?? false,
-      birthDate: data.customer.birthDate ?? '',
-      acceptsMarketing: data.customer.acceptsMarketing ?? true,
-      acceptsPush: data.customer.acceptsPush ?? true,
-      internalNotes: data.customer.internalNotes ?? '',
+      isVip: data.customer.is_vip ?? data.customer.isVip ?? false,
+      isBlocked: data.customer.is_blocked ?? data.customer.isBlocked ?? false,
+      canPost: data.customer.can_post ?? data.customer.canPost ?? false,
+      birthDate: data.customer.birth_date ?? data.customer.birthDate ?? '',
+      acceptsMarketing: data.customer.accepts_marketing ?? data.customer.acceptsMarketing ?? true,
+      acceptsPush: data.customer.accepts_push ?? data.customer.acceptsPush ?? true,
+      internalNotes: data.customer.internal_notes ?? data.customer.internalNotes ?? '',
     } : undefined,
   });
 
@@ -65,6 +66,7 @@ export default function CustomerDetailPage() {
             <div className="flex justify-center gap-2 mt-3">
               {c.isVip && <span className="flex items-center gap-1 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full"><Crown className="w-3 h-3" /> VIP</span>}
               {c.isBlocked && <span className="flex items-center gap-1 text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full"><Ban className="w-3 h-3" /> Bloqueada</span>}
+              {(c.can_post ?? c.canPost) && <span className="flex items-center gap-1 text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full"><Newspaper className="w-3 h-3" /> Feed</span>}
             </div>
           </div>
           <div className="space-y-2 text-sm">
@@ -72,6 +74,7 @@ export default function CustomerDetailPage() {
             <div className="flex justify-between"><span className="text-gray-500">Aniversário</span><span className="text-gray-800">{c.birthDate ? formatDate(c.birthDate) : '—'}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Marketing</span><span className={c.acceptsMarketing ? 'text-green-600' : 'text-red-500'}>{c.acceptsMarketing ? 'Sim' : 'Não'}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Push</span><span className={c.acceptsPush ? 'text-green-600' : 'text-red-500'}>{c.acceptsPush ? 'Sim' : 'Não'}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">Feed</span><span className={(c.can_post ?? c.canPost) ? 'text-emerald-600' : 'text-gray-400'}>{(c.can_post ?? c.canPost) ? 'Liberado' : 'Automático'}</span></div>
           </div>
         </div>
 
@@ -87,9 +90,10 @@ export default function CustomerDetailPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Observações internas</label>
               <textarea {...register('internalNotes')} rows={3} placeholder="Notas visíveis apenas para admins…" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0] resize-none" />
             </div>
-            <div className="flex gap-6">
+            <div className="flex flex-wrap gap-6">
               <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input {...register('isVip')} type="checkbox" className="w-4 h-4 accent-amber-500" /> VIP</label>
               <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input {...register('isBlocked')} type="checkbox" className="w-4 h-4 accent-red-500" /> Bloqueada</label>
+              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input {...register('canPost')} type="checkbox" className="w-4 h-4 accent-emerald-500" /> Pode postar no feed</label>
               <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input {...register('acceptsMarketing')} type="checkbox" className="w-4 h-4 accent-[#C9A4A0]" /> Aceita marketing</label>
               <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input {...register('acceptsPush')} type="checkbox" className="w-4 h-4 accent-[#C9A4A0]" /> Aceita push</label>
             </div>

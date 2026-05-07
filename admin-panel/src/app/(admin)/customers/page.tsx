@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, Crown, Ban, ChevronRight, Loader2, Users, Cake, UserPlus, X } from 'lucide-react';
+import { Search, Crown, Ban, ChevronRight, Loader2, Users, Cake, UserPlus, X, Newspaper } from 'lucide-react';
 import Link from 'next/link';
 import { customersApi } from '@/lib/api';
 import { Customer, Paginated } from '@/types';
@@ -151,6 +151,7 @@ export default function CustomersPage() {
 
   function toggleVip(c: Customer) { updateMutation.mutate({ id: c.id, data: { isVip: !c.isVip } }); }
   function toggleBlock(c: Customer) { updateMutation.mutate({ id: c.id, data: { isBlocked: !c.isBlocked } }); }
+  function toggleCanPost(c: Customer) { updateMutation.mutate({ id: c.id, data: { canPost: !c.canPost } }); }
 
   return (
     <div className="space-y-6">
@@ -220,6 +221,7 @@ export default function CustomersPage() {
                         <div className="flex items-center gap-1.5">
                           <span className="font-medium text-gray-900">{c.name}</span>
                           {c.isVip && <Crown className="w-3.5 h-3.5 text-amber-500" />}
+                          {c.canPost && <Newspaper className="w-3.5 h-3.5 text-emerald-500" />}
                         </div>
                         <p className="text-xs text-gray-400">{c.email}</p>
                       </div>
@@ -245,6 +247,9 @@ export default function CustomersPage() {
                     <div className="flex items-center gap-1 justify-end">
                       <button onClick={() => toggleVip(c)} title={c.isVip ? 'Remover VIP' : 'Marcar VIP'} className={`p-1.5 rounded hover:bg-amber-50 ${c.isVip ? 'text-amber-500' : 'text-gray-300 hover:text-amber-400'}`}>
                         <Crown className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => toggleCanPost(c)} title={c.canPost ? 'Revogar acesso ao feed' : 'Liberar acesso ao feed'} className={`p-1.5 rounded hover:bg-emerald-50 ${c.canPost ? 'text-emerald-500' : 'text-gray-300 hover:text-emerald-400'}`}>
+                        <Newspaper className="w-3.5 h-3.5" />
                       </button>
                       <button onClick={() => toggleBlock(c)} title={c.isBlocked ? 'Desbloquear' : 'Bloquear'} className={`p-1.5 rounded hover:bg-red-50 ${c.isBlocked ? 'text-red-500' : 'text-gray-300 hover:text-red-400'}`}>
                         <Ban className="w-3.5 h-3.5" />

@@ -72,6 +72,10 @@ const MIGRATIONS: Migration[] = [
       CREATE INDEX IF NOT EXISTS post_comments_post_id_idx ON post_comments(post_id);
     `,
   },
+  {
+    name: '009_add_can_post_to_users',
+    sql: `ALTER TABLE users ADD COLUMN IF NOT EXISTS can_post BOOLEAN NOT NULL DEFAULT FALSE`,
+  },
 ];
 
 export async function runMigrations(): Promise<void> {

@@ -75,6 +75,7 @@ export interface Customer {
   phone?: string;
   isVip: boolean;
   isBlocked: boolean;
+  canPost: boolean;
   birthDate?: string;
   acceptsMarketing: boolean;
   acceptsPush: boolean;

@@ -197,7 +197,7 @@ export const adminService = {
       return { items: filtered, total: filtered.length, page, limit };
     }
 
-    let query = supabase.from('users').select('id,name,email,phone,is_vip,is_blocked,birth_date,accepts_marketing,accepts_push,created_at', { count: 'exact' });
+    let query = supabase.from('users').select('id,name,email,phone,is_vip,is_blocked,birth_date,accepts_marketing,accepts_push,can_post,created_at', { count: 'exact' });
     if (search) query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
     query = query.order('created_at', { ascending: false }).range((page - 1) * limit, page * limit - 1);
 
@@ -207,7 +207,7 @@ export const adminService = {
         id: u.id, name: u.name, email: u.email, phone: u.phone,
         isVip: u.is_vip, isBlocked: u.is_blocked, birthDate: u.birth_date,
         acceptsMarketing: u.accepts_marketing, acceptsPush: u.accepts_push,
-        createdAt: u.created_at,
+        canPost: u.can_post ?? false, createdAt: u.created_at,
       })),
       total: count ?? 0,
       page,
@@ -259,11 +259,13 @@ export const adminService = {
 
   async updateCustomer(id: string, input: any) {
     if (!hasSupabase) { return { id, ...input }; }
-    const { data, error } = await supabase.from('users').update({
+    const updatePayload: Record<string, any> = {
       is_vip: input.isVip, is_blocked: input.isBlocked,
       birth_date: input.birthDate, accepts_marketing: input.acceptsMarketing,
       accepts_push: input.acceptsPush, internal_notes: input.internalNotes,
-    }).eq('id', id).select().single();
+    };
+    if (input.canPost !== undefined) updatePayload.can_post = input.canPost;
+    const { data, error } = await supabase.from('users').update(updatePayload).eq('id', id).select().single();
     if (error) throw new Error(error.message);
     return data;
   },

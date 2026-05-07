@@ -107,21 +107,29 @@ postsRouter.post('/', authMiddleware, upload.single('media'), async (req: Reques
       return;
     }
 
-    // Only clients with a concluido appointment can post
-    const { data: concluido } = await supabase
-      .from('appointments')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('status', 'concluido')
-      .limit(1)
+    // Check permission: can_post flag OR at least one concluido appointment
+    const { data: userData } = await supabase
+      .from('users')
+      .select('can_post')
+      .eq('id', userId)
       .maybeSingle();
 
-    if (!concluido) {
-      res.status(403).json({
-        error: 'Forbidden',
-        message: 'Você precisa ter pelo menos um atendimento concluído para publicar.',
-      });
-      return;
+    if (!userData?.can_post) {
+      const { data: concluido } = await supabase
+        .from('appointments')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('status', 'concluido')
+        .limit(1)
+        .maybeSingle();
+
+      if (!concluido) {
+        res.status(403).json({
+          error: 'Forbidden',
+          message: 'Você precisa ter pelo menos um atendimento concluído para publicar.',
+        });
+        return;
+      }
     }
 
     // Upload to Supabase Storage
