@@ -228,6 +228,11 @@ export type CouponsStackParamList = {
   CouponDetails: { couponId: string };
 };
 
+export type AppointmentsStackParamList = {
+  AppointmentsList: undefined;
+  AppointmentDetail: { appointmentId: string };
+};
+
 export type ProfileStackParamList = {
   ProfileMain: undefined;
   Benefits: undefined;

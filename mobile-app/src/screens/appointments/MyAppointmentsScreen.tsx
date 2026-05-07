@@ -9,14 +9,17 @@ import {
 } from 'react-native';
 import { TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQuery } from '@tanstack/react-query';
-import { Appointment, AppointmentStatus } from '../../types';
+import { Appointment, AppointmentStatus, AppointmentsStackParamList } from '../../types';
 import { colors, textStyles, spacing, borderRadius } from '../../theme';
 import { AppointmentCard } from '../../components/common';
 import { appointmentsService } from '../../services/api/appointments';
 import { formatCurrency } from '../../utils/formatters';
 import { Ionicons } from '@expo/vector-icons';
+
+type Nav = NativeStackNavigationProp<AppointmentsStackParamList, 'AppointmentsList'>;
 
 type Tab = 'proximos' | 'historico';
 
@@ -25,6 +28,7 @@ const PAST_STATUSES: AppointmentStatus[] = ['concluido', 'cancelado', 'nao_compa
 
 export function MyAppointmentsScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<Nav>();
   const [activeTab, setActiveTab] = useState<Tab>('proximos');
 
   const {
@@ -50,7 +54,10 @@ export function MyAppointmentsScreen() {
 
   const renderItem = ({ item }: { item: Appointment }) => (
     <View>
-      <AppointmentCard appointment={item} />
+      <AppointmentCard
+        appointment={item}
+        onPress={() => navigation.navigate('AppointmentDetail', { appointmentId: item.id })}
+      />
       {item.status === 'pendente_pagamento' && (
         <View style={styles.paymentAlert}>
           <Ionicons name="alert-circle-outline" size={14} color={colors.warning} />

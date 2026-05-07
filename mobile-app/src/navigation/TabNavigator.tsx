@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MainTabParamList } from '../types';
 import { HomeScreen } from '../screens/home/HomeScreen';
-import { MyAppointmentsScreen } from '../screens/appointments/MyAppointmentsScreen';
+import { AppointmentsNavigator } from './AppointmentsNavigator';
 import { BookingNavigator } from './BookingNavigator';
 import { CouponsNavigator } from './CouponsNavigator';
 import { ProfileNavigator } from './ProfileNavigator';
@@ -62,7 +62,7 @@ export function TabNavigator() {
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Booking" component={BookingNavigator} />
-      <Tab.Screen name="MyAppointments" component={MyAppointmentsScreen} />
+      <Tab.Screen name="MyAppointments" component={AppointmentsNavigator} />
       <Tab.Screen name="Coupons" component={CouponsNavigator} />
       <Tab.Screen name="Profile" component={ProfileNavigator} />
     </Tab.Navigator>
