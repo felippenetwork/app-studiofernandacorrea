@@ -2,19 +2,22 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Modal,
   SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { BookingStackParamList, Service } from '../../types';
+import { BookingStackParamList, Coupon, Service } from '../../types';
 import { colors, textStyles, spacing, borderRadius } from '../../theme';
 import { Header, Button, Divider, Card } from '../../components/common';
 import { useBookingStore } from '../../store/bookingStore';
+import { couponsService } from '../../services/api/coupons';
 import { formatCurrency, formatDateCalendar } from '../../utils/formatters';
 
 function calcBookingFee(service: Service, servicePrice: number): number {
@@ -22,6 +25,13 @@ function calcBookingFee(service: Service, servicePrice: number): number {
     return Math.round(servicePrice * service.bookingFeeValue) / 100;
   }
   return service.bookingFeeValue ?? 40;
+}
+
+function calcDiscount(coupon: Coupon, servicePrice: number): number {
+  if (coupon.discountType === 'percentage') {
+    return Math.round(servicePrice * coupon.discountValue) / 100;
+  }
+  return Math.min(coupon.discountValue, servicePrice);
 }
 
 type Nav = NativeStackNavigationProp<BookingStackParamList, 'AppointmentSummary'>;
@@ -95,9 +105,17 @@ function TermsModal({ visible, onClose }: { visible: boolean; onClose: () => voi
 
 export function AppointmentSummaryScreen() {
   const navigation = useNavigation<Nav>();
-  const { selectedService, selectedVariation, selectedProfessional, selectedDate, selectedTime } = useBookingStore();
+  const {
+    selectedService, selectedVariation, selectedProfessional,
+    selectedDate, selectedTime,
+    selectedCoupon, applyCoupon, removeCoupon,
+  } = useBookingStore();
+
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
+  const [couponCode, setCouponCode] = useState('');
+  const [couponError, setCouponError] = useState('');
+  const [validating, setValidating] = useState(false);
 
   if (!selectedService || !selectedProfessional || !selectedDate || !selectedTime) {
     return null;
@@ -105,18 +123,42 @@ export function AppointmentSummaryScreen() {
 
   const servicePrice = selectedVariation?.price ?? selectedService.price;
   const bookingFee = calcBookingFee(selectedService, servicePrice);
-  const remainingAmount = servicePrice - bookingFee;
+  const discount = selectedCoupon ? calcDiscount(selectedCoupon, servicePrice) : 0;
+  const discountedPrice = servicePrice - discount;
+  const remainingAmount = discountedPrice - bookingFee;
 
   const serviceName = selectedVariation
     ? `${selectedService.name} · ${selectedVariation.name}`
     : selectedService.name;
 
   const infoItems = [
-    { icon: 'cut-outline' as const, label: 'Serviço', value: serviceName },
-    { icon: 'person-outline' as const, label: 'Profissional', value: selectedProfessional.name },
-    { icon: 'calendar-outline' as const, label: 'Data', value: formatDateCalendar(selectedDate) },
-    { icon: 'time-outline' as const, label: 'Horário', value: selectedTime },
+    { icon: 'cut-outline' as const,      label: 'Serviço',       value: serviceName },
+    { icon: 'person-outline' as const,   label: 'Profissional',  value: selectedProfessional.name },
+    { icon: 'calendar-outline' as const, label: 'Data',          value: formatDateCalendar(selectedDate) },
+    { icon: 'time-outline' as const,     label: 'Horário',       value: selectedTime },
   ];
+
+  const handleApplyCoupon = async () => {
+    const code = couponCode.trim().toUpperCase();
+    if (!code) return;
+    setCouponError('');
+    setValidating(true);
+    try {
+      const coupon = await couponsService.validateCoupon(code);
+      applyCoupon(coupon);
+      setCouponCode('');
+    } catch (err) {
+      setCouponError((err as Error).message || 'Cupom inválido ou expirado.');
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    removeCoupon();
+    setCouponCode('');
+    setCouponError('');
+  };
 
   return (
     <View style={styles.container}>
@@ -148,6 +190,55 @@ export function AppointmentSummaryScreen() {
           ))}
         </Card>
 
+        {/* Coupon section */}
+        {selectedCoupon ? (
+          <View style={styles.couponApplied}>
+            <View style={styles.couponAppliedLeft}>
+              <Ionicons name="pricetag" size={16} color={colors.success} />
+              <View>
+                <Text style={styles.couponAppliedCode}>{selectedCoupon.code}</Text>
+                <Text style={styles.couponAppliedDesc}>
+                  {selectedCoupon.discountType === 'percentage'
+                    ? `${selectedCoupon.discountValue}% de desconto — ${formatCurrency(discount)} a menos`
+                    : `${formatCurrency(discount)} de desconto`}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity onPress={handleRemoveCoupon} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="close-circle" size={20} color={colors.textTertiary} />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.couponSection}>
+            <View style={styles.couponInputRow}>
+              <TextInput
+                style={[styles.couponInput, couponError ? styles.couponInputError : null]}
+                placeholder="Código do cupom"
+                placeholderTextColor={colors.textTertiary}
+                value={couponCode}
+                onChangeText={(t) => { setCouponCode(t); setCouponError(''); }}
+                autoCapitalize="characters"
+                returnKeyType="done"
+                onSubmitEditing={handleApplyCoupon}
+                editable={!validating}
+              />
+              <TouchableOpacity
+                style={[styles.couponBtn, (!couponCode.trim() || validating) && styles.couponBtnDisabled]}
+                onPress={handleApplyCoupon}
+                disabled={!couponCode.trim() || validating}
+                activeOpacity={0.8}
+              >
+                {validating
+                  ? <ActivityIndicator size="small" color={colors.textOnPrimary} />
+                  : <Text style={styles.couponBtnText}>Aplicar</Text>}
+              </TouchableOpacity>
+            </View>
+            {!!couponError && (
+              <Text style={styles.couponErrorText}>{couponError}</Text>
+            )}
+          </View>
+        )}
+
         {/* Payment breakdown */}
         <Card style={styles.priceCard} shadow="sm">
           <Text style={styles.priceCardTitle}>Detalhes do Pagamento</Text>
@@ -155,8 +246,27 @@ export function AppointmentSummaryScreen() {
 
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>Valor do serviço</Text>
-            <Text style={styles.priceValue}>{formatCurrency(servicePrice)}</Text>
+            <Text style={[styles.priceValue, discount > 0 && styles.priceStrike]}>
+              {formatCurrency(servicePrice)}
+            </Text>
           </View>
+
+          {discount > 0 && (
+            <View style={styles.priceRow}>
+              <View style={styles.discountLabelRow}>
+                <Ionicons name="pricetag-outline" size={13} color={colors.success} />
+                <Text style={styles.discountLabel}>Desconto ({selectedCoupon!.code})</Text>
+              </View>
+              <Text style={styles.discountValue}>−{formatCurrency(discount)}</Text>
+            </View>
+          )}
+
+          {discount > 0 && (
+            <View style={[styles.priceRow, { marginBottom: spacing[1] }]}>
+              <Text style={styles.priceLabel}>Valor com desconto</Text>
+              <Text style={styles.priceValue}>{formatCurrency(discountedPrice)}</Text>
+            </View>
+          )}
 
           <View style={[styles.priceRow, styles.priceRowHighlight]}>
             <View style={styles.feeLabelBlock}>
@@ -246,10 +356,60 @@ const styles = StyleSheet.create({
   infoValue: { ...textStyles.bodyMedium, color: colors.textPrimary, textTransform: 'capitalize' },
   rowDivider: { marginLeft: 52 + spacing[3] },
 
+  // Coupon — input state
+  couponSection: { marginBottom: spacing[4] },
+  couponInputRow: { flexDirection: 'row', gap: spacing[2] },
+  couponInput: {
+    flex: 1,
+    height: 44,
+    backgroundColor: colors.backgroundCard,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    paddingHorizontal: spacing[4],
+    ...textStyles.bodyMedium,
+    color: colors.textPrimary,
+    letterSpacing: 1.5,
+  },
+  couponInputError: { borderColor: colors.error },
+  couponBtn: {
+    height: 44,
+    paddingHorizontal: spacing[4],
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 80,
+  },
+  couponBtnDisabled: { backgroundColor: colors.border },
+  couponBtnText: { ...textStyles.labelMedium, color: colors.textOnPrimary },
+  couponErrorText: {
+    ...textStyles.caption, color: colors.error, marginTop: spacing[2],
+  },
+
+  // Coupon — applied state
+  couponApplied: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.successLight,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    borderColor: colors.success,
+    padding: spacing[3],
+    marginBottom: spacing[4],
+  },
+  couponAppliedLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing[3], flex: 1 },
+  couponAppliedCode: { ...textStyles.labelLarge, color: colors.success, letterSpacing: 1 },
+  couponAppliedDesc: { ...textStyles.caption, color: colors.success, marginTop: 2 },
+
   // Price card
   priceCard: { marginBottom: spacing[4] },
   priceCardTitle: { ...textStyles.h3, color: colors.textPrimary, marginBottom: spacing[3] },
-  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing[3] },
+  priceRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
+    marginBottom: spacing[3],
+  },
   priceRowHighlight: {
     backgroundColor: colors.primaryGhost,
     borderRadius: borderRadius.sm,
@@ -259,9 +419,13 @@ const styles = StyleSheet.create({
   },
   priceLabel: { ...textStyles.bodyMedium, color: colors.textSecondary },
   priceValue: { ...textStyles.labelLarge, color: colors.textPrimary },
+  priceStrike: { textDecorationLine: 'line-through', color: colors.textTertiary },
   feeLabelBlock: { flex: 1 },
   feeHint: { ...textStyles.caption, color: colors.textTertiary, marginTop: 2 },
   feeValue: { color: colors.primary },
+  discountLabelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
+  discountLabel: { ...textStyles.bodyMedium, color: colors.success },
+  discountValue: { ...textStyles.labelLarge, color: colors.success },
   remainingLabel: { ...textStyles.labelLarge, color: colors.textPrimary },
   remainingValue: { ...textStyles.h1, color: colors.textPrimary },
 
@@ -290,10 +454,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     flexShrink: 0,
   },
-  checkboxChecked: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
+  checkboxChecked: { backgroundColor: colors.primary, borderColor: colors.primary },
   termsText: { ...textStyles.bodySmall, color: colors.textSecondary, flex: 1, lineHeight: 20 },
   termsLink: { color: colors.primary, fontWeight: '600', textDecorationLine: 'underline' },
 
