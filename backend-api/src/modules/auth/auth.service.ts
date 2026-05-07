@@ -142,6 +142,10 @@ export const authService = {
       throw new Error('Conta não ativada. Verifique seu e-mail para confirmar o cadastro.');
     }
 
+    if (dbUser.is_blocked) {
+      throw new Error('Sua conta foi suspensa. Entre em contato com o Studio Fernanda Correa para mais informações.');
+    }
+
     const valid = await bcrypt.compare(input.password, dbUser.password_hash);
     if (!valid) throw new Error('E-mail ou senha incorretos.');
 
