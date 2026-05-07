@@ -1,21 +1,28 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { useQuery } from '@tanstack/react-query';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../store/authStore';
 import { colors, textStyles, spacing, borderRadius, shadows } from '../../theme';
 import { Card, Badge, CouponCard } from '../../components/common';
+import { FeedPost } from '../../components/feed/FeedPost';
+import { CommentsSheet } from '../../components/feed/CommentsSheet';
 import { appointmentsService } from '../../services/api/appointments';
 import { couponsService } from '../../services/api/coupons';
 import { benefitsService } from '../../services/api/benefits';
+import { postsService } from '../../services/api/posts';
+import { Post, HomeStackParamList } from '../../types';
 import {
   formatDateRelative,
   formatCurrency,
@@ -23,10 +30,19 @@ import {
   appointmentStatusColor,
 } from '../../utils/formatters';
 
+type Nav = NativeStackNavigationProp<HomeStackParamList, 'HomeMain'>;
+
 export function HomeScreen() {
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<Nav>();
+  const queryClient = useQueryClient();
+
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [feedPage, setFeedPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
 
   const { data: appointments = [] } = useQuery({
     queryKey: ['appointments'],
@@ -46,33 +62,77 @@ export function HomeScreen() {
     staleTime: 1000 * 60 * 10,
   });
 
+  const { isLoading: feedLoading, refetch: refetchFeed, isRefetching } = useQuery({
+    queryKey: ['feed'],
+    queryFn: async () => {
+      const data = await postsService.getFeed(1);
+      setPosts(data);
+      setFeedPage(1);
+      setHasMore(data.length >= 20);
+      return data;
+    },
+    staleTime: 1000 * 30,
+  });
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await refetchFeed();
+    setIsRefreshing(false);
+  }, [refetchFeed]);
+
+  const loadMore = useCallback(async () => {
+    if (!hasMore || isLoadingMore || feedLoading) return;
+    setIsLoadingMore(true);
+    try {
+      const next = feedPage + 1;
+      const more = await postsService.getFeed(next);
+      if (more.length === 0) {
+        setHasMore(false);
+      } else {
+        setPosts((prev) => [...prev, ...more]);
+        setFeedPage(next);
+      }
+    } catch {
+      // silent — feed stays at current page
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [hasMore, isLoadingMore, feedLoading, feedPage]);
+
+  const handleLikeChange = (postId: string, liked: boolean, count: number) => {
+    setPosts((prev) =>
+      prev.map((p) => (p.id === postId ? { ...p, likedByMe: liked, likesCount: count } : p))
+    );
+  };
+
+  const handleDelete = (postId: string) => {
+    setPosts((prev) => prev.filter((p) => p.id !== postId));
+  };
+
+  const handleCommentAdded = (postId: string) => {
+    setPosts((prev) =>
+      prev.map((p) => (p.id === postId ? { ...p, commentsCount: p.commentsCount + 1 } : p))
+    );
+  };
+
   const nextAppointment = appointments.find(
     (a) => a.status === 'confirmado' || a.status === 'pendente_pagamento'
   );
-  const activeCoupons = coupons.filter((c) => c.status === 'ativo').slice(0, 2);
+  const activeCoupons = coupons.filter((c) => c.status === 'ativo').slice(0, 1);
   const firstName = user?.name?.split(' ')[0] ?? 'Bem-vinda';
 
-  const quickActions = [
-    { icon: 'calendar-outline' as const, label: 'Agendar',  route: 'Booking' },
-    { icon: 'time-outline' as const,     label: 'Horários', route: 'MyAppointments' },
-    { icon: 'pricetag-outline' as const, label: 'Cupons',   route: 'Coupons' },
-    { icon: 'person-outline' as const,   label: 'Perfil',   route: 'Profile' },
-  ];
-
-  return (
-    <ScrollView
-      style={[styles.container, { paddingTop: insets.top }]}
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={styles.content}
-    >
-      {/* Header */}
-      <View style={styles.header}>
+  const ListHeader = (
+    <View>
+      {/* Top header */}
+      <View style={[styles.header, { paddingTop: insets.top + spacing[4] }]}>
         <View>
           <Text style={styles.greeting}>Olá, {firstName} 👋</Text>
           <Text style={styles.greetingSub}>Que bom ter você aqui</Text>
         </View>
         <TouchableOpacity
-          onPress={() => navigation.navigate('Profile', { screen: 'Notifications' })}
+          onPress={() => (navigation as any).navigate('Profile', { screen: 'Notifications' })}
           style={styles.notifBtn}
         >
           <Ionicons name="notifications-outline" size={22} color={colors.textPrimary} />
@@ -80,21 +140,30 @@ export function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Quick Actions */}
-      <View style={styles.quickActions}>
-        {quickActions.map((action) => (
-          <TouchableOpacity
-            key={action.route}
-            onPress={() => navigation.navigate(action.route)}
-            style={styles.quickActionBtn}
-          >
-            <View style={styles.quickActionIcon}>
-              <Ionicons name={action.icon} size={22} color={colors.primary} />
-            </View>
-            <Text style={styles.quickActionLabel}>{action.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {/* Post composer box */}
+      <TouchableOpacity
+        style={styles.composerBox}
+        onPress={() => navigation.navigate('PostComposer' as any)}
+        activeOpacity={0.8}
+      >
+        <View style={styles.composerAvatarFallback}>
+          <Text style={styles.composerAvatarInitials}>
+            {user?.name?.split(' ').slice(0, 2).map((n) => n[0]).join('').toUpperCase() ?? 'EU'}
+          </Text>
+        </View>
+        <Text style={styles.composerPlaceholder}>Compartilhe sua experiência...</Text>
+        <View style={styles.composerActions}>
+          <View style={styles.composerActionItem}>
+            <Ionicons name="image-outline" size={16} color="#4A90E2" />
+          </View>
+          <View style={styles.composerActionItem}>
+            <Ionicons name="videocam-outline" size={16} color="#E2844A" />
+          </View>
+          <View style={styles.composerActionItem}>
+            <Ionicons name="refresh-outline" size={16} color={colors.primary} />
+          </View>
+        </View>
+      </TouchableOpacity>
 
       {/* Next Appointment */}
       {nextAppointment && (
@@ -122,14 +191,6 @@ export function HomeScreen() {
               </View>
               <View style={styles.nextApptFooter}>
                 <Text style={styles.nextApptPrice}>{formatCurrency(nextAppointment.servicePrice)}</Text>
-                {nextAppointment.status === 'pendente_pagamento' && (
-                  <TouchableOpacity
-                    onPress={() => navigation.navigate('MyAppointments')}
-                    style={styles.payBtn}
-                  >
-                    <Text style={styles.payBtnText}>Ver detalhes</Text>
-                  </TouchableOpacity>
-                )}
               </View>
             </View>
           </Card>
@@ -141,14 +202,14 @@ export function HomeScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Cupom em Destaque</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Coupons')}>
+            <TouchableOpacity onPress={() => (navigation as any).navigate('Coupons')}>
               <Text style={styles.sectionLink}>Ver todos</Text>
             </TouchableOpacity>
           </View>
           <CouponCard
             coupon={activeCoupons[0]}
             onPress={() =>
-              navigation.navigate('Coupons', {
+              (navigation as any).navigate('Coupons', {
                 screen: 'CouponDetails',
                 params: { couponId: activeCoupons[0].id },
               })
@@ -158,52 +219,81 @@ export function HomeScreen() {
         </View>
       )}
 
-      {/* Benefits preview */}
-      {benefits.length > 0 && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Benefícios</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Profile', { screen: 'Benefits' })}>
-              <Text style={styles.sectionLink}>Ver todos</Text>
-            </TouchableOpacity>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.benefitsScroll}>
-            {benefits.slice(0, 4).map((benefit) => (
-              <Card key={benefit.id} style={styles.benefitCard} shadow="sm">
-                <View style={styles.benefitIcon}>
-                  <Ionicons
-                    name={
-                      benefit.type === 'promocao' ? 'gift-outline'
-                      : benefit.type === 'novidade' ? 'sparkles-outline'
-                      : benefit.type === 'evento' ? 'calendar-outline'
-                      : 'star-outline'
-                    }
-                    size={24}
-                    color={colors.accent}
-                  />
-                </View>
-                <Text style={styles.benefitTitle} numberOfLines={2}>{benefit.title}</Text>
-                <Text style={styles.benefitDesc} numberOfLines={3}>{benefit.description}</Text>
-              </Card>
-            ))}
-          </ScrollView>
-        </View>
-      )}
+      {/* Feed title */}
+      <View style={styles.feedTitleRow}>
+        <Ionicons name="people-outline" size={16} color={colors.textSecondary} />
+        <Text style={styles.feedTitle}>Comunidade</Text>
+      </View>
+    </View>
+  );
 
-      <View style={{ height: spacing[8] }} />
-    </ScrollView>
+  return (
+    <>
+      <FlatList
+        data={posts}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <FeedPost
+            post={item}
+            currentUserId={user?.id}
+            onLikeChange={handleLikeChange}
+            onCommentPress={setSelectedPostId}
+            onDelete={handleDelete}
+          />
+        )}
+        ListHeaderComponent={ListHeader}
+        ListEmptyComponent={
+          feedLoading ? (
+            <View style={styles.feedEmpty}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : (
+            <View style={styles.feedEmpty}>
+              <Ionicons name="camera-outline" size={40} color={colors.border} />
+              <Text style={styles.feedEmptyText}>
+                Ainda não há posts.{'\n'}Seja o primeiro a compartilhar!
+              </Text>
+            </View>
+          )
+        }
+        ListFooterComponent={
+          isLoadingMore ? (
+            <View style={styles.loadingMore}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : null
+        }
+        contentContainerStyle={styles.listContent}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.4}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      />
+
+      <CommentsSheet
+        postId={selectedPostId}
+        onClose={() => setSelectedPostId(null)}
+        onCommentAdded={() => selectedPostId && handleCommentAdded(selectedPostId)}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingHorizontal: spacing[5] },
+  listContent: { paddingBottom: spacing[10] },
+
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    paddingTop: spacing[4],
-    marginBottom: spacing[6],
+    paddingHorizontal: spacing[5],
+    marginBottom: spacing[4],
   },
   greeting: { ...textStyles.displaySmall, color: colors.textPrimary },
   greetingSub: { ...textStyles.bodySmall, color: colors.textTertiary, marginTop: 4 },
@@ -214,23 +304,36 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderWidth: 1.5, borderColor: colors.background,
   },
-  quickActions: {
+
+  composerBox: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: spacing[6],
+    alignItems: 'center',
     backgroundColor: colors.backgroundCard,
     borderRadius: borderRadius.md,
-    padding: spacing[4],
+    marginHorizontal: spacing[5],
+    marginBottom: spacing[5],
+    padding: spacing[3],
+    gap: spacing[3],
+    borderWidth: 1,
+    borderColor: colors.divider,
     ...shadows.sm,
   },
-  quickActionBtn: { alignItems: 'center', gap: spacing[2] },
-  quickActionIcon: {
-    width: 48, height: 48, borderRadius: 24,
+  composerAvatarFallback: {
+    width: 36, height: 36, borderRadius: 18,
     backgroundColor: colors.primaryGhost,
     alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
   },
-  quickActionLabel: { ...textStyles.labelSmall, color: colors.textSecondary },
-  section: { marginBottom: spacing[6] },
+  composerAvatarInitials: { ...textStyles.caption, color: colors.primary, fontWeight: '700' },
+  composerPlaceholder: { ...textStyles.bodyMedium, color: colors.textTertiary, flex: 1 },
+  composerActions: { flexDirection: 'row', gap: spacing[2] },
+  composerActionItem: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: colors.background,
+    alignItems: 'center', justifyContent: 'center',
+  },
+
+  section: { marginHorizontal: spacing[5], marginBottom: spacing[5] },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -239,6 +342,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { ...textStyles.h3, color: colors.textPrimary, marginBottom: spacing[3] },
   sectionLink: { ...textStyles.bodySmall, color: colors.primary },
+
   nextApptCard: { flexDirection: 'row', overflow: 'hidden', padding: 0 },
   nextApptAccent: { width: 4 },
   nextApptContent: { flex: 1, padding: spacing[4] },
@@ -251,28 +355,29 @@ const styles = StyleSheet.create({
   nextApptService: { ...textStyles.h3, color: colors.textPrimary, flex: 1, marginRight: spacing[2] },
   nextApptRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 },
   nextApptInfo: { ...textStyles.bodySmall, color: colors.textSecondary },
-  nextApptFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: spacing[3],
-  },
+  nextApptFooter: { marginTop: spacing[3] },
   nextApptPrice: { ...textStyles.labelLarge, color: colors.primary },
-  payBtn: {
-    backgroundColor: colors.warningLight,
-    paddingHorizontal: spacing[3],
-    paddingVertical: 6,
-    borderRadius: borderRadius.sm,
+
+  feedTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    paddingHorizontal: spacing[5],
+    paddingBottom: spacing[3],
   },
-  payBtnText: { ...textStyles.buttonSmall, color: colors.warning },
-  benefitsScroll: { marginHorizontal: -spacing[5], paddingHorizontal: spacing[5] },
-  benefitCard: { width: 180, marginRight: spacing[3], padding: spacing[4] },
-  benefitIcon: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: colors.accentLight,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: spacing[3],
+  feedTitle: { ...textStyles.labelLarge, color: colors.textSecondary },
+
+  feedEmpty: {
+    alignItems: 'center',
+    gap: spacing[3],
+    paddingVertical: spacing[10],
+    paddingHorizontal: spacing[8],
   },
-  benefitTitle: { ...textStyles.h3, color: colors.textPrimary, marginBottom: spacing[2] },
-  benefitDesc: { ...textStyles.bodySmall, color: colors.textSecondary, lineHeight: 18 },
+  feedEmptyText: {
+    ...textStyles.bodyMedium,
+    color: colors.textTertiary,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  loadingMore: { paddingVertical: spacing[6], alignItems: 'center' },
 });

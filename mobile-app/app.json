@@ -16,8 +16,9 @@
       "bundleIdentifier": "com.studiofernandacorrea.app",
       "buildNumber": "1",
       "infoPlist": {
-        "NSCameraUsageDescription": "Usamos a câmera para foto de perfil.",
-        "NSPhotoLibraryUsageDescription": "Usamos a galeria para foto de perfil.",
+        "NSCameraUsageDescription": "Usamos a câmera para fotos, vídeos e boomerang nos posts.",
+        "NSPhotoLibraryUsageDescription": "Usamos a galeria para fotos e vídeos nos posts e foto de perfil.",
+        "NSMicrophoneUsageDescription": "Usamos o microfone para gravar vídeos e boomerang nos posts.",
         "NSUserNotificationsUsageDescription": "Notificações para confirmações e lembretes de agendamentos."
       }
     },
@@ -29,6 +30,8 @@
       "package": "com.studiofernandacorrea.app",
       "versionCode": 1,
       "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE",
         "android.permission.POST_NOTIFICATIONS"
@@ -52,7 +55,15 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Usamos a galeria para foto de perfil."
+          "photosPermission": "Usamos a galeria para fotos e vídeos nos posts e foto de perfil."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Usamos a câmera para fotos, vídeos e boomerang nos posts.",
+          "microphonePermission": "Usamos o microfone para gravar vídeos e boomerang nos posts.",
+          "recordAudioAndroid": true
         }
       ]
     ],

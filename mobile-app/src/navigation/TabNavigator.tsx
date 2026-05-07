@@ -4,12 +4,12 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MainTabParamList } from '../types';
-import { HomeScreen } from '../screens/home/HomeScreen';
 import { AppointmentsNavigator } from './AppointmentsNavigator';
 import { BookingNavigator } from './BookingNavigator';
 import { CouponsNavigator } from './CouponsNavigator';
 import { ProfileNavigator } from './ProfileNavigator';
 import { colors, shadows, textStyles, borderRadius } from '../theme';
+import { HomeNavigator } from './HomeNavigator';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -60,7 +60,7 @@ export function TabNavigator() {
         };
       }}
     >
-      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Home" component={HomeNavigator} />
       <Tab.Screen name="Booking" component={BookingNavigator} />
       <Tab.Screen name="MyAppointments" component={AppointmentsNavigator} />
       <Tab.Screen name="Coupons" component={CouponsNavigator} />

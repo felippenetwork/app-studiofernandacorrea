@@ -242,6 +242,40 @@ export interface Review {
   createdAt: string;
 }
 
+// ─── Feed / Posts ─────────────────────────────────────────────────────────────
+
+export type MediaType = 'photo' | 'video' | 'boomerang';
+
+export interface Post {
+  id: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string | null;
+  text: string;
+  mediaUrl: string;
+  mediaType: MediaType;
+  likesCount: number;
+  commentsCount: number;
+  likedByMe: boolean;
+  createdAt: string;
+}
+
+export interface PostComment {
+  id: string;
+  postId: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string | null;
+  text: string;
+  createdAt: string;
+}
+
+export type HomeStackParamList = {
+  HomeMain: undefined;
+  PostComposer: { capturedUri?: string; capturedType?: MediaType } | undefined;
+  BoomerangCamera: undefined;
+};
+
 export type ProfileStackParamList = {
   ProfileMain: undefined;
   Benefits: undefined;

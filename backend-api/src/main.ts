@@ -15,6 +15,7 @@ import { notificationsRouter } from './modules/notifications/notifications.route
 import { trinksRouter } from './modules/trinks/trinks.router';
 // Admin
 import { reviewsRouter } from './modules/reviews/reviews.router';
+import { postsRouter } from './modules/posts/posts.router';
 import { adminAuthRouter } from './modules/admin-auth/admin-auth.router';
 import { adminRouter } from './modules/admin/admin.router';
 import { adminNotificationsRouter } from './modules/admin-notifications/admin-notifications.router';
@@ -93,6 +94,7 @@ app.use('/api/benefits',      benefitsRouter);
 app.use('/api/payments',      paymentsRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/reviews',       reviewsRouter);
+app.use('/api/posts',         postsRouter);
 
 // ─── Public professionals list (no auth) ─────────────────────────────────────
 // Returns active professionals for the mobile booking flow.
@@ -210,6 +212,19 @@ app.use(errorHandler);
 if (env.NODE_ENV !== 'test') {
   // Run DB migrations before accepting traffic
   runMigrations().catch((e) => console.error('[migrate] failed:', e));
+
+  // Ensure Supabase Storage bucket for posts exists
+  if (hasSupabase) {
+    import('./config/supabase').then(({ supabase }) => {
+      supabase.storage.createBucket('post-media', { public: true }).then(({ error }) => {
+        if (error && !error.message.includes('already exists') && !error.message.includes('duplicate')) {
+          console.warn('[storage] post-media bucket:', error.message);
+        } else if (!error) {
+          console.log('   Storage     : ✓ post-media bucket created');
+        }
+      });
+    });
+  }
 
   const server = app.listen(env.PORT, () => {
     console.log(`\n🌸 Studio Fernanda Correa API — ${env.NODE_ENV}`);
