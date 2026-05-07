@@ -65,7 +65,8 @@
           "microphonePermission": "Usamos o microfone para gravar vídeos e boomerang nos posts.",
           "recordAudioAndroid": true
         }
-      ]
-    ],
+      ],
+      "expo-video"
+    ]
   }
 }
