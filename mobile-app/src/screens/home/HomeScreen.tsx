@@ -15,12 +15,10 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../store/authStore';
 import { colors, textStyles, spacing, borderRadius, shadows } from '../../theme';
-import { Card, Badge, CouponCard } from '../../components/common';
+import { Card, Badge } from '../../components/common';
 import { FeedPost } from '../../components/feed/FeedPost';
 import { CommentsSheet } from '../../components/feed/CommentsSheet';
 import { appointmentsService } from '../../services/api/appointments';
-import { couponsService } from '../../services/api/coupons';
-import { benefitsService } from '../../services/api/benefits';
 import { postsService } from '../../services/api/posts';
 import { Post, HomeStackParamList } from '../../types';
 import {
@@ -50,19 +48,7 @@ export function HomeScreen() {
     staleTime: 1000 * 60 * 2,
   });
 
-  const { data: coupons = [] } = useQuery({
-    queryKey: ['coupons'],
-    queryFn: couponsService.getCoupons,
-    staleTime: 1000 * 60 * 5,
-  });
-
-  const { data: benefits = [] } = useQuery({
-    queryKey: ['benefits'],
-    queryFn: benefitsService.getBenefits,
-    staleTime: 1000 * 60 * 10,
-  });
-
-  const { isLoading: feedLoading, refetch: refetchFeed, isRefetching } = useQuery({
+const { isLoading: feedLoading, refetch: refetchFeed, isRefetching } = useQuery({
     queryKey: ['feed'],
     queryFn: async () => {
       const data = await postsService.getFeed(1);
@@ -120,7 +106,6 @@ export function HomeScreen() {
   const nextAppointment = appointments.find(
     (a) => a.status === 'confirmado' || a.status === 'pendente_pagamento'
   );
-  const activeCoupons = coupons.filter((c) => c.status === 'ativo').slice(0, 1);
   const firstName = user?.name?.split(' ')[0] ?? 'Bem-vinda';
 
   const ListHeader = (
@@ -139,31 +124,6 @@ export function HomeScreen() {
           <View style={styles.notifDot} />
         </TouchableOpacity>
       </View>
-
-      {/* Post composer box */}
-      <TouchableOpacity
-        style={styles.composerBox}
-        onPress={() => navigation.navigate('PostComposer' as any)}
-        activeOpacity={0.8}
-      >
-        <View style={styles.composerAvatarFallback}>
-          <Text style={styles.composerAvatarInitials}>
-            {user?.name?.split(' ').slice(0, 2).map((n) => n[0]).join('').toUpperCase() ?? 'EU'}
-          </Text>
-        </View>
-        <Text style={styles.composerPlaceholder}>Compartilhe sua experiência...</Text>
-        <View style={styles.composerActions}>
-          <View style={styles.composerActionItem}>
-            <Ionicons name="image-outline" size={16} color="#4A90E2" />
-          </View>
-          <View style={styles.composerActionItem}>
-            <Ionicons name="videocam-outline" size={16} color="#E2844A" />
-          </View>
-          <View style={styles.composerActionItem}>
-            <Ionicons name="refresh-outline" size={16} color={colors.primary} />
-          </View>
-        </View>
-      </TouchableOpacity>
 
       {/* Next Appointment */}
       {nextAppointment && (
@@ -197,33 +157,36 @@ export function HomeScreen() {
         </View>
       )}
 
-      {/* Featured Coupon */}
-      {activeCoupons.length > 0 && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Cupom em Destaque</Text>
-            <TouchableOpacity onPress={() => (navigation as any).navigate('Coupons')}>
-              <Text style={styles.sectionLink}>Ver todos</Text>
-            </TouchableOpacity>
-          </View>
-          <CouponCard
-            coupon={activeCoupons[0]}
-            onPress={() =>
-              (navigation as any).navigate('Coupons', {
-                screen: 'CouponDetails',
-                params: { couponId: activeCoupons[0].id },
-              })
-            }
-            compact
-          />
-        </View>
-      )}
-
       {/* Feed title */}
       <View style={styles.feedTitleRow}>
         <Ionicons name="people-outline" size={16} color={colors.textSecondary} />
         <Text style={styles.feedTitle}>Comunidade</Text>
       </View>
+
+      {/* Post composer box */}
+      <TouchableOpacity
+        style={styles.composerBox}
+        onPress={() => navigation.navigate('PostComposer' as any)}
+        activeOpacity={0.8}
+      >
+        <View style={styles.composerAvatarFallback}>
+          <Text style={styles.composerAvatarInitials}>
+            {user?.name?.split(' ').slice(0, 2).map((n) => n[0]).join('').toUpperCase() ?? 'EU'}
+          </Text>
+        </View>
+        <Text style={styles.composerPlaceholder}>Compartilhe sua experiência...</Text>
+        <View style={styles.composerActions}>
+          <View style={styles.composerActionItem}>
+            <Ionicons name="image-outline" size={16} color="#4A90E2" />
+          </View>
+          <View style={styles.composerActionItem}>
+            <Ionicons name="videocam-outline" size={16} color="#E2844A" />
+          </View>
+          <View style={styles.composerActionItem}>
+            <Ionicons name="refresh-outline" size={16} color={colors.primary} />
+          </View>
+        </View>
+      </TouchableOpacity>
     </View>
   );
 
