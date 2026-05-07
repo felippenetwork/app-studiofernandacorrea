@@ -5,6 +5,8 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  TouchableOpacity,
+  Linking,
 } from 'react-native';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
@@ -25,6 +27,15 @@ import {
 
 type Route = RouteProp<AppointmentsStackParamList, 'AppointmentDetail'>;
 type Nav = NativeStackNavigationProp<AppointmentsStackParamList, 'AppointmentDetail'>;
+
+const WHATSAPP_NUMBER = '5521999633443';
+
+function openWhatsApp(serviceName: string, date: string, time: string) {
+  const msg = encodeURIComponent(
+    `Olá! Tenho uma dúvida sobre meu agendamento de ${serviceName} no dia ${date} às ${time}.`
+  );
+  Linking.openURL(`https://wa.me/${WHATSAPP_NUMBER}?text=${msg}`);
+}
 
 // ─── Status Banner ────────────────────────────────────────────────────────────
 
@@ -222,6 +233,20 @@ export function AppointmentDetailScreen() {
           </View>
         )}
 
+        {/* WhatsApp support */}
+        <TouchableOpacity
+          style={styles.whatsappBtn}
+          onPress={() => openWhatsApp(
+            appointment.service.name,
+            formatDateCalendar(appointment.appointmentDate),
+            appointment.appointmentTime
+          )}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
+          <Text style={styles.whatsappBtnText}>Falar com a Fernanda</Text>
+        </TouchableOpacity>
+
         {/* ID footer */}
         <Text style={styles.idText}>ID: {appointment.id}</Text>
 
@@ -304,6 +329,23 @@ const styles = StyleSheet.create({
   remainingValue: { ...textStyles.h2, color: colors.textPrimary },
 
   notesText: { ...textStyles.bodyMedium, color: colors.textSecondary, lineHeight: 22 },
+
+  whatsappBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing[2],
+    backgroundColor: colors.backgroundCard,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    borderColor: '#25D366',
+    paddingVertical: spacing[4],
+    marginBottom: spacing[3],
+  },
+  whatsappBtnText: {
+    ...textStyles.labelLarge,
+    color: '#25D366',
+  },
 
   idText: {
     ...textStyles.caption,
