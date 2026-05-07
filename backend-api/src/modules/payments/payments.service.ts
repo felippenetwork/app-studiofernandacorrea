@@ -53,29 +53,43 @@ export const paymentsService = {
     appointmentId: string,
     method: PaymentMethod
   ): Promise<CreatePaymentResult> {
-    const paymentId = `sim-${Date.now()}`;
+    const externalId = `sim-${Date.now()}`;
     console.log(`[payments] ⚡ Simulating approval — appt: ${appointmentId}, method: ${method}`);
 
     if (hasSupabase) {
       const { supabase } = await import('../../config/supabase');
-      await supabase.from('payments').insert({
+
+      // Fetch the actual booking fee from the appointment (not hardcoded)
+      const { data: apptRow } = await supabase
+        .from('appointments')
+        .select('booking_fee')
+        .eq('id', appointmentId)
+        .single();
+      const amount = (apptRow as any)?.booking_fee ?? BOOKING_FEE;
+
+      const { data: payRow } = await supabase.from('payments').insert({
         user_id: userId,
         appointment_id: appointmentId,
-        amount: BOOKING_FEE,
+        amount,
         type: 'booking_fee',
         method,
         status: 'aprovado',
-        external_payment_id: paymentId,
-      });
+        external_payment_id: externalId,
+      }).select('id').single();
+
+      // Use the DB-generated UUID as the payment reference
+      const paymentId = (payRow as any)?.id ?? externalId;
       await appointmentsRepository.confirmPayment(appointmentId, paymentId);
 
-      // Sync to Trinks (non-blocking) — appointment appears in professional's agenda
+      // Sync to Trinks (non-blocking)
       _syncToTrinks(appointmentId).catch(() => {});
       // Push notification (non-blocking)
       await _triggerConfirmationPush(userId, appointmentId).catch(() => {});
+
+      return { paymentId, status: 'aprovado' };
     }
 
-    return { paymentId, status: 'aprovado' };
+    return { paymentId: externalId, status: 'aprovado' };
   },
 
   /**
