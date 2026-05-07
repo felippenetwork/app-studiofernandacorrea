@@ -73,7 +73,6 @@ export interface Customer {
   name: string;
   email: string;
   phone?: string;
-  isVip: boolean;
   isBlocked: boolean;
   canPost: boolean;
   birthDate?: string;

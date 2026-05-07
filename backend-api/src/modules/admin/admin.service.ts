@@ -21,9 +21,9 @@ export const MOCK_PROFESSIONALS = [
 ];
 
 const MOCK_CUSTOMERS = [
-  { id: 'user-1', name: 'Ana Paula Santos', email: 'ana@email.com', phone: '11999999001', isVip: true, isBlocked: false, birthDate: '1990-03-15', acceptsMarketing: true, acceptsPush: true, createdAt: '2024-01-10' },
-  { id: 'user-2', name: 'Carla Mendes', email: 'carla@email.com', phone: '11999999002', isVip: false, isBlocked: false, birthDate: '1985-07-22', acceptsMarketing: true, acceptsPush: false, createdAt: '2024-02-05' },
-  { id: 'user-3', name: 'Bianca Oliveira', email: 'bianca@email.com', phone: '11999999003', isVip: false, isBlocked: false, birthDate: null, acceptsMarketing: false, acceptsPush: true, createdAt: '2024-03-01' },
+  { id: 'user-1', name: 'Ana Paula Santos', email: 'ana@email.com', phone: '11999999001', isBlocked: false, birthDate: '1990-03-15', acceptsMarketing: true, acceptsPush: true, createdAt: '2024-01-10' },
+  { id: 'user-2', name: 'Carla Mendes', email: 'carla@email.com', phone: '11999999002', isBlocked: false, birthDate: '1985-07-22', acceptsMarketing: true, acceptsPush: false, createdAt: '2024-02-05' },
+  { id: 'user-3', name: 'Bianca Oliveira', email: 'bianca@email.com', phone: '11999999003', isBlocked: false, birthDate: null, acceptsMarketing: false, acceptsPush: true, createdAt: '2024-03-01' },
 ];
 
 export const adminService = {
@@ -197,7 +197,7 @@ export const adminService = {
       return { items: filtered, total: filtered.length, page, limit };
     }
 
-    let query = supabase.from('users').select('id,name,email,phone,is_vip,is_blocked,birth_date,accepts_marketing,accepts_push,can_post,created_at', { count: 'exact' });
+    let query = supabase.from('users').select('id,name,email,phone,is_blocked,birth_date,accepts_marketing,accepts_push,can_post,created_at', { count: 'exact' });
     if (search) query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
     query = query.order('created_at', { ascending: false }).range((page - 1) * limit, page * limit - 1);
 
@@ -205,7 +205,7 @@ export const adminService = {
     return {
       items: (data ?? []).map((u: any) => ({
         id: u.id, name: u.name, email: u.email, phone: u.phone,
-        isVip: u.is_vip, isBlocked: u.is_blocked, birthDate: u.birth_date,
+        isBlocked: u.is_blocked, birthDate: u.birth_date,
         acceptsMarketing: u.accepts_marketing, acceptsPush: u.accepts_push,
         canPost: u.can_post ?? false, createdAt: u.created_at,
       })),
@@ -232,7 +232,7 @@ export const adminService = {
       return {
         id: `user-${Date.now()}`, name: input.name, email: input.email,
         phone: input.phone ?? null, birthDate: input.birthDate ?? null,
-        isVip: false, isBlocked: false,
+        isBlocked: false,
         acceptsMarketing: input.acceptsMarketing ?? false,
         acceptsPush: input.acceptsPush ?? false,
         createdAt: new Date().toISOString(),
@@ -245,13 +245,13 @@ export const adminService = {
       birth_date: input.birthDate, password_hash: '',
       accepts_marketing: input.acceptsMarketing ?? false,
       accepts_push: input.acceptsPush ?? false,
-      is_vip: false, is_blocked: false, is_active: true,
+      is_blocked: false, is_active: true,
       email_verified_at: new Date().toISOString(),
     }).select().single();
     if (error) throw new Error(error.message);
     return {
       id: data.id, name: data.name, email: data.email, phone: data.phone,
-      isVip: data.is_vip, isBlocked: data.is_blocked, birthDate: data.birth_date,
+      isBlocked: data.is_blocked, birthDate: data.birth_date,
       acceptsMarketing: data.accepts_marketing, acceptsPush: data.accepts_push,
       createdAt: data.created_at,
     };
@@ -260,7 +260,7 @@ export const adminService = {
   async updateCustomer(id: string, input: any) {
     if (!hasSupabase) { return { id, ...input }; }
     const updatePayload: Record<string, any> = {
-      is_vip: input.isVip, is_blocked: input.isBlocked,
+      is_blocked: input.isBlocked,
       birth_date: input.birthDate, accepts_marketing: input.acceptsMarketing,
       accepts_push: input.acceptsPush, internal_notes: input.internalNotes,
     };
