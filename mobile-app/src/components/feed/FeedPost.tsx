@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   View, Text, Image, StyleSheet, TouchableOpacity, Alert,
 } from 'react-native';
-import { Video, ResizeMode } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
 import { Post } from '../../types';
 import { colors, textStyles, spacing, borderRadius, shadows } from '../../theme';
@@ -29,6 +29,23 @@ function timeAgo(iso: string): string {
 
 function initials(name: string) {
   return name.split(' ').slice(0, 2).map((n) => n[0]).join('').toUpperCase();
+}
+
+function PostVideo({ uri, isBoomerang }: { uri: string; isBoomerang: boolean }) {
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = isBoomerang;
+    p.muted = isBoomerang;
+    if (isBoomerang) p.play();
+  });
+  return (
+    <VideoView
+      player={player}
+      style={styles.media}
+      contentFit="cover"
+      nativeControls={!isBoomerang}
+      allowsFullscreen={!isBoomerang}
+    />
+  );
 }
 
 export function FeedPost({ post, currentUserId, onLikeChange, onCommentPress, onDelete }: FeedPostProps) {
@@ -115,15 +132,7 @@ export function FeedPost({ post, currentUserId, onLikeChange, onCommentPress, on
         {post.mediaType === 'photo' ? (
           <Image source={{ uri: post.mediaUrl }} style={styles.media} resizeMode="cover" />
         ) : (
-          <Video
-            source={{ uri: post.mediaUrl }}
-            style={styles.media}
-            resizeMode={ResizeMode.COVER}
-            shouldPlay={post.mediaType === 'boomerang'}
-            isLooping={post.mediaType === 'boomerang'}
-            useNativeControls={post.mediaType === 'video'}
-            isMuted={post.mediaType === 'boomerang'}
-          />
+          <PostVideo uri={post.mediaUrl} isBoomerang={post.mediaType === 'boomerang'} />
         )}
         {post.mediaType === 'boomerang' && (
           <View style={styles.boomerangBadge}>

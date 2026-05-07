@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, StyleSheet, TouchableOpacity, Image,
   ScrollView, KeyboardAvoidingView, Platform, Alert, ActivityIndicator,
 } from 'react-native';
-import { Video, ResizeMode } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -26,6 +26,23 @@ const MEDIA_OPTIONS: { type: MediaType; icon: string; label: string; color: stri
 
 function initials(name: string) {
   return name.split(' ').slice(0, 2).map((n) => n[0]).join('').toUpperCase();
+}
+
+function PreviewVideo({ uri, isBoomerang }: { uri: string; isBoomerang: boolean }) {
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = isBoomerang;
+    p.muted = isBoomerang;
+    if (isBoomerang) p.play();
+  });
+  return (
+    <VideoView
+      player={player}
+      style={styles.preview}
+      contentFit="cover"
+      nativeControls={!isBoomerang}
+      allowsFullscreen={!isBoomerang}
+    />
+  );
 }
 
 export function PostComposerScreen() {
@@ -82,8 +99,8 @@ export function PostComposerScreen() {
   const openCamera = async (type: MediaType) => {
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: type === 'photo'
-        ? ImagePicker.MediaTypeOptions.Images
-        : ImagePicker.MediaTypeOptions.Videos,
+        ? 'images'
+        : 'videos',
       quality: 0.85,
       videoMaxDuration: 30,
       allowsEditing: false,
@@ -97,8 +114,8 @@ export function PostComposerScreen() {
   const openGallery = async (type: MediaType) => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: type === 'photo'
-        ? ImagePicker.MediaTypeOptions.Images
-        : ImagePicker.MediaTypeOptions.Videos,
+        ? 'images'
+        : 'videos',
       quality: 0.85,
       videoMaxDuration: 30,
       allowsEditing: false,
@@ -179,15 +196,7 @@ export function PostComposerScreen() {
               {mediaType === 'photo' ? (
                 <Image source={{ uri: mediaUri }} style={styles.preview} resizeMode="cover" />
               ) : (
-                <Video
-                  source={{ uri: mediaUri }}
-                  style={styles.preview}
-                  resizeMode={ResizeMode.COVER}
-                  shouldPlay={mediaType === 'boomerang'}
-                  isLooping={mediaType === 'boomerang'}
-                  useNativeControls={mediaType === 'video'}
-                  isMuted={mediaType === 'boomerang'}
-                />
+                <PreviewVideo uri={mediaUri} isBoomerang={mediaType === 'boomerang'} />
               )}
               <TouchableOpacity
                 style={styles.removeMedia}
