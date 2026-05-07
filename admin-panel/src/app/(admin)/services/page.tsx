@@ -252,6 +252,8 @@ export default function ServicesPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [variations, setVariations] = useState<ServiceVariation[]>([]);
+  const [feeType, setFeeType] = useState<'fixed' | 'percentage'>('fixed');
+  const [feeValue, setFeeValue] = useState<number>(40);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const sensors = useSensors(
@@ -291,6 +293,8 @@ export default function ServicesPage() {
   function openCreate() {
     setEditing(null);
     setVariations([]);
+    setFeeType('fixed');
+    setFeeValue(40);
     reset({ name: '', description: '', price: 0, durationMinutes: 60, category: 'cabelo', isActive: true });
     setShowForm(true);
     setError(null);
@@ -299,6 +303,8 @@ export default function ServicesPage() {
   function openEdit(s: Service) {
     setEditing(s);
     setVariations(s.variations ?? []);
+    setFeeType(s.bookingFeeType ?? 'fixed');
+    setFeeValue(s.bookingFeeValue ?? 40);
     reset({
       name: s.name, description: s.description ?? '',
       price: s.price, durationMinutes: s.durationMinutes,
@@ -309,11 +315,17 @@ export default function ServicesPage() {
     setError(null);
   }
 
-  function closeForm() { setShowForm(false); setEditing(null); setVariations([]); }
+  function closeForm() {
+    setShowForm(false);
+    setEditing(null);
+    setVariations([]);
+    setFeeType('fixed');
+    setFeeValue(40);
+  }
 
   const onSubmit = (data: ServiceForm) => {
     setError(null);
-    const payload = { ...data, variations };
+    const payload = { ...data, variations, bookingFeeType: feeType, bookingFeeValue: feeValue };
     if (editing) {
       updateMutation.mutate({ id: editing.id, data: payload });
     } else {
@@ -512,6 +524,51 @@ export default function ServicesPage() {
 
               <div className="border-t border-gray-100 pt-4">
                 <VariationEditor variations={variations} onChange={setVariations} />
+              </div>
+
+              <div className="border-t border-gray-100 pt-4 space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Taxa de reserva</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFeeType('fixed')}
+                    className={cn(
+                      'flex-1 h-9 rounded-lg text-sm font-medium border transition-colors',
+                      feeType === 'fixed'
+                        ? 'bg-[#C9A4A0] text-white border-[#C9A4A0]'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-[#C9A4A0]'
+                    )}
+                  >
+                    Fixo (R$)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFeeType('percentage')}
+                    className={cn(
+                      'flex-1 h-9 rounded-lg text-sm font-medium border transition-colors',
+                      feeType === 'percentage'
+                        ? 'bg-[#C9A4A0] text-white border-[#C9A4A0]'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-[#C9A4A0]'
+                    )}
+                  >
+                    Porcentagem (%)
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-500 w-6 text-center">{feeType === 'fixed' ? 'R$' : '%'}</span>
+                  <input
+                    type="number"
+                    step={feeType === 'fixed' ? '0.01' : '1'}
+                    min="0"
+                    max={feeType === 'percentage' ? '100' : undefined}
+                    value={feeValue}
+                    onChange={(e) => setFeeValue(Number(e.target.value))}
+                    className="w-28 h-9 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]"
+                  />
+                  {feeType === 'percentage' && (
+                    <span className="text-xs text-gray-400">% do preço do serviço</span>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center gap-2">

@@ -26,8 +26,8 @@ export const appointmentsService = {
   },
 
   async create(userId: string, input: CreateAppointmentInput): Promise<DbAppointment> {
-    const servicePrice = await getServicePrice(input.serviceId, input.variationId);
-    const bookingFee = BOOKING_FEE;
+    const { price: servicePrice, bookingFeeType, bookingFeeValue } = await getServiceData(input.serviceId, input.variationId);
+    const bookingFee = calcBookingFee(servicePrice, bookingFeeType, bookingFeeValue);
     const remainingAmount = servicePrice - bookingFee;
 
     if (!hasSupabase) {
@@ -92,27 +92,50 @@ export const appointmentsService = {
   },
 };
 
-// ─── Helper ──────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-async function getServicePrice(serviceId: string, variationId?: string): Promise<number> {
+interface ServiceData {
+  price: number;
+  bookingFeeType: string;
+  bookingFeeValue: number;
+}
+
+async function getServiceData(serviceId: string, variationId?: string): Promise<ServiceData> {
   if (!hasSupabase) {
     const prices: Record<string, number> = {
-      '1': 120, '2': 280, '3': 350,
-      '4': 90,  '5': 180, '6': 60,
-      '7': 200, '8': 160,
+      'svc-1': 150, 'svc-2': 120, 'svc-3': 280, 'svc-4': 90,
     };
-    return prices[serviceId] ?? 100;
+    return { price: prices[serviceId] ?? 100, bookingFeeType: 'fixed', bookingFeeValue: BOOKING_FEE };
   }
 
   const { supabase } = await import('../../config/supabase');
-  const { data } = await supabase.from('services').select('price, variations').eq('id', serviceId).single();
+  const { data } = await supabase.from('services')
+    .select('price, variations, booking_fee_type, booking_fee_value')
+    .eq('id', serviceId).single();
   if (!data) throw new Error('Serviço não encontrado.');
-  const row = data as { price: number; variations: { id: string; price: number }[] };
+  const row = data as {
+    price: number;
+    variations: { id: string; price: number }[];
+    booking_fee_type: string;
+    booking_fee_value: number;
+  };
 
+  let price = row.price;
   if (variationId && Array.isArray(row.variations)) {
     const variation = row.variations.find((v) => v.id === variationId);
-    if (variation) return variation.price;
+    if (variation) price = variation.price;
   }
 
-  return row.price;
+  return {
+    price,
+    bookingFeeType: row.booking_fee_type ?? 'fixed',
+    bookingFeeValue: row.booking_fee_value ?? BOOKING_FEE,
+  };
+}
+
+function calcBookingFee(servicePrice: number, feeType: string, feeValue: number): number {
+  if (feeType === 'percentage') {
+    return Math.round(servicePrice * feeValue) / 100;
+  }
+  return feeValue;
 }

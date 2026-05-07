@@ -13,6 +13,8 @@ function mapService(s: any): Service {
     category: s.category ?? 'outros',
     imageUrl: s.imageUrl ?? s.image_url ?? undefined,
     isActive: s.isActive ?? s.is_active ?? s.active ?? true,
+    bookingFeeType: s.bookingFeeType ?? s.booking_fee_type ?? 'fixed',
+    bookingFeeValue: s.bookingFeeValue ?? s.booking_fee_value ?? 40,
     variations: Array.isArray(s.variations) && s.variations.length > 0 ? s.variations : undefined,
   };
 }

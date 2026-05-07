@@ -40,6 +40,8 @@ const serviceSchema = z.object({
   imageUrl: z.union([z.string().url(), z.literal('')]).optional().transform((v) => v || undefined),
   isActive: z.boolean().default(true),
   bookingFeeApplicable: z.boolean().default(true),
+  bookingFeeType: z.enum(['fixed', 'percentage']).default('fixed'),
+  bookingFeeValue: z.number().nonnegative().default(40),
   professionalIds: z.array(z.string()).optional(),
   variations: z.array(serviceVariationSchema).default([]),
 });

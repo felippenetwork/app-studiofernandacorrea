@@ -42,6 +42,8 @@ export interface Service {
   category: ServiceCategory;
   imageUrl?: string;
   isActive: boolean;
+  bookingFeeType?: 'fixed' | 'percentage';
+  bookingFeeValue?: number;
   variations?: ServiceVariation[];
 }
 

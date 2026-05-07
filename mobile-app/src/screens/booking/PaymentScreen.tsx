@@ -19,7 +19,14 @@ import { Header, Button, Card, Divider } from '../../components/common';
 import { useBookingStore } from '../../store/bookingStore';
 import { appointmentsService, CreateAppointmentResult } from '../../services/api/appointments';
 import { formatCurrency } from '../../utils/formatters';
-import { BOOKING_FEE } from '../../mocks/data';
+import { Service } from '../../types';
+
+function calcBookingFee(service: Service, servicePrice: number): number {
+  if (service.bookingFeeType === 'percentage' && service.bookingFeeValue != null) {
+    return Math.round(servicePrice * service.bookingFeeValue) / 100;
+  }
+  return service.bookingFeeValue ?? 40;
+}
 
 type Nav = NativeStackNavigationProp<BookingStackParamList, 'Payment'>;
 
@@ -54,7 +61,7 @@ export function PaymentScreen() {
         // Card/instant approval
         Alert.alert(
           '✓ Agendamento Confirmado',
-          `${selectedService?.name} confirmado para ${selectedDate} às ${selectedTime}.\n\nTaxa de reserva de ${formatCurrency(BOOKING_FEE)} processada com sucesso.`,
+          `${selectedService?.name} confirmado para ${selectedDate} às ${selectedTime}.\n\nTaxa de reserva de ${formatCurrency(bookingFee)} processada com sucesso.`,
           [
             {
               text: 'Ver meus agendamentos',
@@ -98,6 +105,9 @@ export function PaymentScreen() {
 
   if (!selectedService) return null;
 
+  const servicePrice = selectedVariation?.price ?? selectedService.price;
+  const bookingFee = calcBookingFee(selectedService, servicePrice);
+
   // ─── PIX QR Code Screen ───────────────────────────────────────────────────
 
   if (pixResult) {
@@ -111,7 +121,7 @@ export function PaymentScreen() {
               <Text style={styles.pixTitle}>Agendamento criado!</Text>
               <Text style={styles.pixSubtitle}>
                 Aguardando pagamento da taxa de reserva de{' '}
-                <Text style={{ fontWeight: '700' }}>{formatCurrency(BOOKING_FEE)}</Text>
+                <Text style={{ fontWeight: '700' }}>{formatCurrency(bookingFee)}</Text>
               </Text>
             </View>
 
@@ -164,7 +174,7 @@ export function PaymentScreen() {
             {[
               'Abra o app do seu banco',
               'Escolha pagar via Pix e escaneie o QR code ou use o código acima',
-              'Confirme o pagamento de ' + formatCurrency(BOOKING_FEE),
+              'Confirme o pagamento de ' + formatCurrency(bookingFee),
               'Seu agendamento será confirmado automaticamente',
             ].map((step, i) => (
               <View key={i} style={styles.stepRow}>
@@ -201,7 +211,7 @@ export function PaymentScreen() {
         {/* Amount card */}
         <Card style={styles.amountCard} shadow="md">
           <Text style={styles.amountLabel}>Taxa de reserva</Text>
-          <Text style={styles.amount}>{formatCurrency(BOOKING_FEE)}</Text>
+          <Text style={styles.amount}>{formatCurrency(bookingFee)}</Text>
           <Divider style={styles.divider} />
           <Text style={styles.amountNote}>
             Este valor é descontado do serviço no dia do atendimento.
@@ -212,7 +222,7 @@ export function PaymentScreen() {
           </View>
           <View style={styles.serviceRow}>
             <Text style={styles.serviceLabel}>Restante no dia</Text>
-            <Text style={styles.serviceValue}>{formatCurrency(selectedService.price - BOOKING_FEE)}</Text>
+            <Text style={styles.serviceValue}>{formatCurrency(servicePrice - bookingFee)}</Text>
           </View>
           {selectedCoupon && (
             <View style={[styles.serviceRow, styles.couponRow]}>
@@ -265,7 +275,7 @@ export function PaymentScreen() {
         </View>
 
         <Button
-          label={loading ? 'Processando…' : `Confirmar pagamento · ${formatCurrency(BOOKING_FEE)}`}
+          label={loading ? 'Processando…' : `Confirmar pagamento · ${formatCurrency(bookingFee)}`}
           onPress={handleConfirm}
           loading={loading}
           disabled={!selectedMethod || loading}

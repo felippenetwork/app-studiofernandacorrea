@@ -5,14 +5,14 @@ import { MOCK_APPOINTMENTS } from '../appointments/appointments.mock';
 // ─── Mock data ────────────────────────────────────────────────────────────────
 
 export const MOCK_SERVICES = [
-  { id: 'svc-1', name: 'Cílios Fio a Fio Clássico', description: 'Aplicação de extensão de cílios fio a fio', price: 150, durationMinutes: 120, category: 'outros', isActive: true, imageUrl: undefined, bookingFeeApplicable: true, variations: [
+  { id: 'svc-1', name: 'Cílios Fio a Fio Clássico', description: 'Aplicação de extensão de cílios fio a fio', price: 150, durationMinutes: 120, category: 'outros', isActive: true, imageUrl: undefined, bookingFeeApplicable: true, bookingFeeType: 'fixed', bookingFeeValue: 40, variations: [
     { id: 'var-1a', name: 'Colocação', price: 150, durationMinutes: 120, description: 'Para quem nunca colocou ou passou dos 20 dias' },
     { id: 'var-1b', name: 'Manutenção', price: 80, durationMinutes: 60, description: 'Para quem colocou entre 14 e 20 dias' },
     { id: 'var-1c', name: 'Remoção', price: 40, durationMinutes: 30 },
   ]},
-  { id: 'svc-2', name: 'Coloração', description: 'Coloração completa', price: 120, durationMinutes: 120, category: 'cabelo', isActive: true, imageUrl: undefined, bookingFeeApplicable: true, variations: [] },
-  { id: 'svc-3', name: 'Mechas', description: 'Mechas e luzes', price: 280, durationMinutes: 180, category: 'cabelo', isActive: true, imageUrl: undefined, bookingFeeApplicable: true, variations: [] },
-  { id: 'svc-4', name: 'Manicure', description: 'Manicure completa', price: 90, durationMinutes: 60, category: 'unhas', isActive: true, imageUrl: undefined, bookingFeeApplicable: true, variations: [] },
+  { id: 'svc-2', name: 'Coloração', description: 'Coloração completa', price: 120, durationMinutes: 120, category: 'cabelo', isActive: true, imageUrl: undefined, bookingFeeApplicable: true, bookingFeeType: 'fixed', bookingFeeValue: 40, variations: [] },
+  { id: 'svc-3', name: 'Mechas', description: 'Mechas e luzes', price: 280, durationMinutes: 180, category: 'cabelo', isActive: true, imageUrl: undefined, bookingFeeApplicable: true, bookingFeeType: 'fixed', bookingFeeValue: 40, variations: [] },
+  { id: 'svc-4', name: 'Manicure', description: 'Manicure completa', price: 90, durationMinutes: 60, category: 'unhas', isActive: true, imageUrl: undefined, bookingFeeApplicable: true, bookingFeeType: 'fixed', bookingFeeValue: 40, variations: [] },
 ];
 
 export const MOCK_PROFESSIONALS = [
@@ -93,6 +93,8 @@ export const adminService = {
       durationMinutes: s.duration_minutes, category: s.category,
       imageUrl: s.image_url, isActive: s.is_active,
       sortOrder: s.sort_order ?? 0,
+      bookingFeeType: s.booking_fee_type ?? 'fixed',
+      bookingFeeValue: s.booking_fee_value ?? 40,
       variations: s.variations ?? [],
     }));
   },
@@ -119,6 +121,8 @@ export const adminService = {
       name: input.name, description: input.description, price: input.price,
       duration_minutes: input.durationMinutes, category: input.category,
       image_url: input.imageUrl, is_active: input.isActive ?? true,
+      booking_fee_type: input.bookingFeeType ?? 'fixed',
+      booking_fee_value: input.bookingFeeValue ?? 40,
       variations: input.variations ?? [],
     }).select().single();
     if (error) throw new Error(error.message);
@@ -131,6 +135,8 @@ export const adminService = {
       name: input.name, description: input.description, price: input.price,
       duration_minutes: input.durationMinutes, category: input.category,
       image_url: input.imageUrl, is_active: input.isActive,
+      booking_fee_type: input.bookingFeeType,
+      booking_fee_value: input.bookingFeeValue,
       variations: input.variations ?? [],
     }).eq('id', id).select().single();
     if (error) throw new Error(error.message);

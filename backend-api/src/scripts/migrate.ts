@@ -20,6 +20,10 @@ const MIGRATIONS: Migration[] = [
     name: '005_add_service_sort_order',
     sql: `ALTER TABLE services ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0`,
   },
+  {
+    name: '006_add_service_booking_fee_config',
+    sql: `ALTER TABLE services ADD COLUMN IF NOT EXISTS booking_fee_type TEXT NOT NULL DEFAULT 'fixed', ADD COLUMN IF NOT EXISTS booking_fee_value NUMERIC NOT NULL DEFAULT 40`,
+  },
 ];
 
 export async function runMigrations(): Promise<void> {
