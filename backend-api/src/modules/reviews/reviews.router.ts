@@ -65,7 +65,7 @@ reviewsRouter.post('/', validate(createReviewSchema), async (req: Request, res: 
     }
 
     // Update professional's average rating
-    supabase.rpc('update_professional_rating', { p_id: appt.professional_id }).catch(() => {});
+    supabase.rpc('update_professional_rating', { p_id: appt.professional_id }).then(() => {}, () => {});
 
     res.status(201).json({ data: review, message: 'Avaliação registrada! Obrigada pelo feedback.' });
   } catch (err) {
