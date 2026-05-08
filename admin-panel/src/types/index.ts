@@ -43,6 +43,7 @@ export interface Service {
   price: number;
   durationMinutes: number;
   category: string;
+  categories: string[];
   imageUrl?: string;
   isActive: boolean;
   bookingFeeApplicable: boolean;
@@ -187,12 +188,20 @@ export interface PushCampaign {
   id: string;
   title: string;
   body: string;
-  segment: 'todos' | 'vip' | 'ativos' | 'inativos';
-  status: 'rascunho' | 'agendada' | 'enviada' | 'cancelada';
+  segment: string;
+  type: 'unico' | 'manual' | 'recorrente';
+  status: 'rascunho' | 'agendada' | 'enviada' | 'manual' | 'recorrente' | 'cancelada';
   scheduledAt?: string;
   sentAt?: string;
   sentCount: number;
   createdAt?: string;
+  // Recurrence
+  recurrenceType?: 'weekly' | 'interval';
+  recurrenceDays?: number[];
+  recurrenceInterval?: number;
+  recurrenceHour?: number;
+  recurrenceNextSend?: string;
+  recurrenceActive?: boolean;
 }
 
 // ─── App Settings ────────────────────────────────────────────────────────────

@@ -56,6 +56,26 @@ export const servicesApi = {
     apiClient.patch('/admin/services/reorder', { items }).then((r) => r.data),
 };
 
+// ─── Service Categories ───────────────────────────────────────────────────────
+
+export const serviceCategoriesApi = {
+  list: () => apiClient.get('/admin/service-categories').then((r) => r.data.data as { key: string; label: string }[]),
+  upsert: (cat: { key: string; label: string }) =>
+    apiClient.put(`/admin/service-categories/${cat.key}`, cat).then((r) => r.data.data as { key: string; label: string }[]),
+  remove: (key: string) =>
+    apiClient.delete(`/admin/service-categories/${key}`).then((r) => r.data.data as { key: string; label: string }[]),
+  reorder: (cats: { key: string; label: string }[]) =>
+    apiClient.put('/admin/service-categories', { categories: cats }).then((r) => r.data.data as { key: string; label: string }[]),
+};
+
+// ─── Professional Specialties ─────────────────────────────────────────────────
+
+export const professionalSpecialtiesApi = {
+  list: () => apiClient.get('/admin/professional-specialties').then((r) => r.data.data as string[]),
+  save: (specialties: string[]) =>
+    apiClient.put('/admin/professional-specialties', { specialties }).then((r) => r.data.data as string[]),
+};
+
 // ─── Professionals ────────────────────────────────────────────────────────────
 
 export const professionalsApi = {
@@ -124,6 +144,8 @@ export const birthdayApi = {
   getSettings: () => apiClient.get('/admin/birthday/settings').then((r) => r.data.data),
   updateSettings: (data: any) => apiClient.put('/admin/birthday/settings', data).then((r) => r.data.data),
   runNow: () => apiClient.post('/admin/birthday/run-now').then((r) => r.data),
+  calendar: (month: number) =>
+    apiClient.get('/admin/birthday/calendar', { params: { month } }).then((r) => r.data.data as Record<number, string[]>),
 };
 
 // ─── Push Campaigns ───────────────────────────────────────────────────────────
@@ -132,6 +154,7 @@ export const pushCampaignsApi = {
   list: () => apiClient.get('/admin/push-campaigns').then((r) => r.data.data),
   create: (data: any) => apiClient.post('/admin/push-campaigns', data).then((r) => r.data.data),
   send: (id: string) => apiClient.post(`/admin/push-campaigns/${id}/send`).then((r) => r.data),
+  toggle: (id: string) => apiClient.patch(`/admin/push-campaigns/${id}/toggle`).then((r) => r.data),
 };
 
 // ─── Feedback ─────────────────────────────────────────────────────────────────

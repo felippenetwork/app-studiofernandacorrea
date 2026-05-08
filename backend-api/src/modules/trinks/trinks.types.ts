@@ -1,5 +1,20 @@
 // ─── Real Trinks API response types (fields in Portuguese) ───────────────────
 
+export interface TrinksClienteAPI {
+  id: number;
+  nome: string;
+  telefone?: string;
+  email?: string;
+  dataNascimento?: string;
+}
+
+export interface TrinksClient {
+  id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+}
+
 export interface TrinksServicoAPI {
   id: number;
   nome: string;

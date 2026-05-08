@@ -1,11 +1,8 @@
 import * as ExpoNotifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { apiClient, USE_MOCK } from './client';
 
-/**
- * Requests notification permissions and registers the Expo push token
- * with the backend so the server can send push notifications.
- */
 export const pushNotificationsService = {
   async registerPushToken(): Promise<string | null> {
     try {
@@ -22,7 +19,17 @@ export const pushNotificationsService = {
         return null;
       }
 
-      const tokenData = await ExpoNotifications.getExpoPushTokenAsync();
+      // SDK 50+ requires projectId from EAS. Falls back gracefully if not configured.
+      const projectId =
+        (Constants.expoConfig?.extra?.eas?.projectId as string | undefined) ??
+        (Constants.easConfig?.projectId as string | undefined);
+
+      if (!projectId) {
+        console.warn('[push] No EAS projectId found. Run `eas init` to enable push notifications.');
+        return null;
+      }
+
+      const tokenData = await ExpoNotifications.getExpoPushTokenAsync({ projectId });
       const token = tokenData.data;
 
       if (!USE_MOCK) {

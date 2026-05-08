@@ -1,9 +1,10 @@
 import React, { useCallback } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import * as ExpoNotifications from 'expo-notifications';
 import {
   useFonts,
   PlayfairDisplay_400Regular,
@@ -24,6 +25,25 @@ import { StatusBar } from 'expo-status-bar';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { ErrorBoundary } from './src/components/common/ErrorBoundary';
 import { colors } from './src/theme';
+
+// Show notifications even when the app is open (foreground)
+ExpoNotifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+
+// Android: create notification channel
+if (Platform.OS === 'android') {
+  ExpoNotifications.setNotificationChannelAsync('default', {
+    name: 'Studio Fernanda Correa',
+    importance: ExpoNotifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#C9A4A0',
+  });
+}
 
 SplashScreen.preventAutoHideAsync();
 

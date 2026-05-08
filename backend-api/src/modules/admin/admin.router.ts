@@ -10,6 +10,31 @@ export const adminRouter = Router();
 
 adminRouter.use(adminAuthMiddleware);
 
+// Fire-and-forget audit helper — never blocks the response
+function audit(
+  req: Request,
+  action: string,
+  entityType?: string,
+  entityId?: string,
+  changes?: Record<string, any>,
+) {
+  const admin = (req as any).adminUser;
+  const ip =
+    (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ??
+    req.socket.remoteAddress;
+  adminService
+    .createAuditLog({
+      adminUserId: admin?.id ?? 'unknown',
+      adminEmail: admin?.email ?? 'unknown',
+      action,
+      entityType,
+      entityId,
+      changes,
+      ipAddress: ip,
+    })
+    .catch(console.error);
+}
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 adminRouter.get('/dashboard/stats', async (_req: Request, res: Response): Promise<void> => {
@@ -61,18 +86,86 @@ adminRouter.patch('/services/reorder', requireRole('owner', 'gerente'), validate
 });
 
 adminRouter.post('/services', requireRole('owner', 'gerente'), validate(serviceSchema), async (req: Request, res: Response): Promise<void> => {
-  try { res.status(201).json({ data: await adminService.createService(req.body), message: 'Serviço criado.' }); }
-  catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+  try {
+    const data = await adminService.createService(req.body);
+    audit(req, 'service.create', 'service', data.id, { name: data.name });
+    res.status(201).json({ data, message: 'Serviço criado.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
 adminRouter.put('/services/:id', requireRole('owner', 'gerente'), async (req: Request, res: Response): Promise<void> => {
-  try { res.json({ data: await adminService.updateService(req.params.id, req.body), message: 'Serviço atualizado.' }); }
-  catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+  try {
+    const data = await adminService.updateService(req.params.id, req.body);
+    audit(req, 'service.update', 'service', req.params.id, { name: req.body.name });
+    res.json({ data, message: 'Serviço atualizado.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
 adminRouter.delete('/services/:id', requireRole('owner'), async (req: Request, res: Response): Promise<void> => {
-  try { await adminService.deleteService(req.params.id); res.json({ data: null, message: 'Serviço removido.' }); }
-  catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+  try {
+    await adminService.deleteService(req.params.id);
+    audit(req, 'service.delete', 'service', req.params.id);
+    res.json({ data: null, message: 'Serviço removido.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+});
+
+// ─── Service Categories ───────────────────────────────────────────────────────
+
+adminRouter.get('/service-categories', async (_req: Request, res: Response): Promise<void> => {
+  try { res.json({ data: await adminService.listServiceCategories() }); }
+  catch (err) { res.status(500).json({ error: 'InternalError', message: (err as Error).message }); }
+});
+
+const categorySchema = z.object({
+  key: z.string().min(1).regex(/^[a-z0-9_]+$/, 'Use apenas letras minúsculas, números e _'),
+  label: z.string().min(1),
+});
+
+// PUT /admin/service-categories  → reorder (full replacement)
+adminRouter.put('/service-categories', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { categories } = req.body as { categories: { key: string; label: string }[] };
+    if (!Array.isArray(categories)) { res.status(400).json({ error: 'BadRequest', message: 'categories must be an array' }); return; }
+    const adminId = (req as any).adminUser?.id ?? 'system';
+    await adminService.setSetting('service_categories', categories, adminId);
+    res.json({ data: categories, message: 'Ordem salva.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+});
+
+// PUT /admin/service-categories/:key  → upsert single
+adminRouter.put('/service-categories/:key', validate(categorySchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const adminId = (req as any).adminUser?.id ?? 'system';
+    const data = await adminService.upsertServiceCategory(req.body, adminId);
+    audit(req, 'category.upsert', 'service_category', req.params.key, { label: req.body.label });
+    res.json({ data, message: 'Categoria salva.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+});
+
+adminRouter.delete('/service-categories/:key', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const adminId = (req as any).adminUser?.id ?? 'system';
+    const data = await adminService.deleteServiceCategory(req.params.key, adminId);
+    audit(req, 'category.delete', 'service_category', req.params.key);
+    res.json({ data, message: 'Categoria removida.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+});
+
+// ─── Professional Specialties ─────────────────────────────────────────────────
+
+adminRouter.get('/professional-specialties', async (_req: Request, res: Response): Promise<void> => {
+  try { res.json({ data: await adminService.listProfessionalSpecialties() }); }
+  catch (err) { res.status(500).json({ error: 'InternalError', message: (err as Error).message }); }
+});
+
+adminRouter.put('/professional-specialties', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const adminId = (req as any).adminUser?.id ?? 'system';
+    const specialties = z.array(z.string().min(1)).parse(req.body.specialties ?? []);
+    const data = await adminService.saveProfessionalSpecialties(specialties, adminId);
+    audit(req, 'specialty.update', undefined, undefined, { count: specialties.length });
+    res.json({ data, message: 'Especialidades salvas.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
 // ─── Professionals ────────────────────────────────────────────────────────────
@@ -92,18 +185,27 @@ adminRouter.get('/professionals', async (_req: Request, res: Response): Promise<
 });
 
 adminRouter.post('/professionals', requireRole('owner', 'gerente'), validate(professionalSchema), async (req: Request, res: Response): Promise<void> => {
-  try { res.status(201).json({ data: await adminService.createProfessional(req.body), message: 'Profissional criado.' }); }
-  catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+  try {
+    const data = await adminService.createProfessional(req.body);
+    audit(req, 'professional.create', 'professional', (data as any).id, { name: req.body.name });
+    res.status(201).json({ data, message: 'Profissional criado.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
 adminRouter.put('/professionals/:id', requireRole('owner', 'gerente'), async (req: Request, res: Response): Promise<void> => {
-  try { res.json({ data: await adminService.updateProfessional(req.params.id, req.body), message: 'Profissional atualizado.' }); }
-  catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+  try {
+    const data = await adminService.updateProfessional(req.params.id, req.body);
+    audit(req, 'professional.update', 'professional', req.params.id, { name: req.body.name });
+    res.json({ data, message: 'Profissional atualizado.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
 adminRouter.delete('/professionals/:id', requireRole('owner'), async (req: Request, res: Response): Promise<void> => {
-  try { await adminService.deleteProfessional(req.params.id); res.json({ data: null, message: 'Profissional removido.' }); }
-  catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+  try {
+    await adminService.deleteProfessional(req.params.id);
+    audit(req, 'professional.delete', 'professional', req.params.id);
+    res.json({ data: null, message: 'Profissional removido.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
 // ─── Customers ────────────────────────────────────────────────────────────────
@@ -131,13 +233,19 @@ const createCustomerSchema = z.object({
 });
 
 adminRouter.post('/customers', requireRole('owner', 'gerente', 'recepcao'), validate(createCustomerSchema), async (req: Request, res: Response): Promise<void> => {
-  try { res.status(201).json({ data: await adminService.createCustomer(req.body), message: 'Cliente cadastrada.' }); }
-  catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+  try {
+    const data = await adminService.createCustomer(req.body);
+    audit(req, 'customer.create', 'customer', (data as any).id, { name: req.body.name, email: req.body.email });
+    res.status(201).json({ data, message: 'Cliente cadastrada.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
 adminRouter.put('/customers/:id', requireRole('owner', 'gerente', 'recepcao'), async (req: Request, res: Response): Promise<void> => {
-  try { res.json({ data: await adminService.updateCustomer(req.params.id, req.body), message: 'Cliente atualizado.' }); }
-  catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+  try {
+    const data = await adminService.updateCustomer(req.params.id, req.body);
+    audit(req, 'customer.update', 'customer', req.params.id, { name: req.body.name });
+    res.json({ data, message: 'Cliente atualizado.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
 // ─── Coupons ──────────────────────────────────────────────────────────────────
@@ -163,18 +271,27 @@ adminRouter.get('/coupons', async (_req: Request, res: Response): Promise<void> 
 });
 
 adminRouter.post('/coupons', requireRole('owner', 'gerente', 'marketing'), validate(couponSchema), async (req: Request, res: Response): Promise<void> => {
-  try { res.status(201).json({ data: await adminService.createCoupon(req.body), message: 'Cupom criado.' }); }
-  catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+  try {
+    const data = await adminService.createCoupon(req.body);
+    audit(req, 'coupon.create', 'coupon', (data as any).id, { code: req.body.code });
+    res.status(201).json({ data, message: 'Cupom criado.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
 adminRouter.put('/coupons/:id', requireRole('owner', 'gerente', 'marketing'), async (req: Request, res: Response): Promise<void> => {
-  try { res.json({ data: await adminService.updateCoupon(req.params.id, req.body), message: 'Cupom atualizado.' }); }
-  catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+  try {
+    const data = await adminService.updateCoupon(req.params.id, req.body);
+    audit(req, 'coupon.update', 'coupon', req.params.id, { code: req.body.code });
+    res.json({ data, message: 'Cupom atualizado.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
 adminRouter.delete('/coupons/:id', requireRole('owner', 'gerente'), async (req: Request, res: Response): Promise<void> => {
-  try { await adminService.deleteCoupon(req.params.id); res.json({ data: null, message: 'Cupom removido.' }); }
-  catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+  try {
+    await adminService.deleteCoupon(req.params.id);
+    audit(req, 'coupon.delete', 'coupon', req.params.id);
+    res.json({ data: null, message: 'Cupom removido.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
 // ─── Benefits ─────────────────────────────────────────────────────────────────
@@ -185,18 +302,27 @@ adminRouter.get('/benefits', async (_req: Request, res: Response): Promise<void>
 });
 
 adminRouter.post('/benefits', requireRole('owner', 'gerente', 'marketing'), async (req: Request, res: Response): Promise<void> => {
-  try { res.status(201).json({ data: await adminService.createBenefit(req.body), message: 'Benefício criado.' }); }
-  catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+  try {
+    const data = await adminService.createBenefit(req.body);
+    audit(req, 'benefit.create', 'benefit', (data as any).id, { title: req.body.title });
+    res.status(201).json({ data, message: 'Benefício criado.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
 adminRouter.put('/benefits/:id', requireRole('owner', 'gerente', 'marketing'), async (req: Request, res: Response): Promise<void> => {
-  try { res.json({ data: await adminService.updateBenefit(req.params.id, req.body), message: 'Benefício atualizado.' }); }
-  catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+  try {
+    const data = await adminService.updateBenefit(req.params.id, req.body);
+    audit(req, 'benefit.update', 'benefit', req.params.id, { title: req.body.title });
+    res.json({ data, message: 'Benefício atualizado.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
 adminRouter.delete('/benefits/:id', requireRole('owner', 'gerente'), async (req: Request, res: Response): Promise<void> => {
-  try { await adminService.deleteBenefit(req.params.id); res.json({ data: null, message: 'Benefício removido.' }); }
-  catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+  try {
+    await adminService.deleteBenefit(req.params.id);
+    audit(req, 'benefit.delete', 'benefit', req.params.id);
+    res.json({ data: null, message: 'Benefício removido.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
 // ─── Appointments ─────────────────────────────────────────────────────────────
@@ -236,8 +362,11 @@ const createAppointmentSchema = z.object({
 });
 
 adminRouter.post('/appointments', requireRole('owner', 'gerente', 'recepcao'), validate(createAppointmentSchema), async (req: Request, res: Response): Promise<void> => {
-  try { res.status(201).json({ data: await adminService.createAppointment(req.body), message: 'Agendamento criado.' }); }
-  catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+  try {
+    const data = await adminService.createAppointment(req.body);
+    audit(req, 'appointment.create', 'appointment', (data as any).id, { userId: req.body.userId, date: req.body.appointmentDate });
+    res.status(201).json({ data, message: 'Agendamento criado.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
 // ─── Payments ─────────────────────────────────────────────────────────────────
@@ -259,7 +388,9 @@ adminRouter.get('/settings/:key', async (req: Request, res: Response): Promise<v
 adminRouter.put('/settings/:key', requireRole('owner', 'gerente'), async (req: Request, res: Response): Promise<void> => {
   try {
     const admin = (req as any).adminUser;
-    res.json({ data: await adminService.setSetting(req.params.key, req.body.value, admin.id), message: 'Configuração salva.' });
+    const data = await adminService.setSetting(req.params.key, req.body.value, admin.id);
+    audit(req, 'settings.update', 'setting', req.params.key);
+    res.json({ data, message: 'Configuração salva.' });
   } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
@@ -278,13 +409,19 @@ const createAdminUserSchema = z.object({
 });
 
 adminRouter.post('/users', requireRole('owner'), validate(createAdminUserSchema), async (req: Request, res: Response): Promise<void> => {
-  try { res.status(201).json({ data: await adminAuthService.createAdmin(req.body), message: 'Usuário admin criado.' }); }
-  catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+  try {
+    const data = await adminAuthService.createAdmin(req.body);
+    audit(req, 'admin_user.create', 'admin_user', (data as any).id, { email: req.body.email, role: req.body.role });
+    res.status(201).json({ data, message: 'Usuário admin criado.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
 adminRouter.put('/users/:id', requireRole('owner'), async (req: Request, res: Response): Promise<void> => {
-  try { res.json({ data: await adminService.updateAdminUser(req.params.id, req.body), message: 'Usuário atualizado.' }); }
-  catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+  try {
+    const data = await adminService.updateAdminUser(req.params.id, req.body);
+    audit(req, 'admin_user.update', 'admin_user', req.params.id, { role: req.body.role });
+    res.json({ data, message: 'Usuário atualizado.' });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
 // ─── Audit Logs ───────────────────────────────────────────────────────────────
@@ -306,15 +443,25 @@ adminRouter.get('/push-campaigns', async (_req: Request, res: Response): Promise
 adminRouter.post('/push-campaigns', requireRole('owner', 'gerente', 'marketing'), async (req: Request, res: Response): Promise<void> => {
   try {
     const admin = (req as any).adminUser;
-    res.status(201).json({ data: await adminService.createPushCampaign(req.body, admin.id), message: 'Campanha criada.' });
+    const data = await adminService.createPushCampaign(req.body, admin.id);
+    audit(req, 'push_campaign.create', 'push_campaign', (data as any).id, { title: req.body.title });
+    res.status(201).json({ data, message: 'Campanha criada.' });
   } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
-// POST /api/admin/push-campaigns/:id/send — send campaign now
 adminRouter.post('/push-campaigns/:id/send', requireRole('owner', 'gerente', 'marketing'), async (req: Request, res: Response): Promise<void> => {
   try {
     const result = await adminService.sendPushCampaign(req.params.id);
+    audit(req, 'push_campaign.send', 'push_campaign', req.params.id, { sent: result.sent });
     res.json({ data: result, message: `Campanha enviada para ${result.sent} dispositivos.` });
+  } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
+});
+
+adminRouter.patch('/push-campaigns/:id/toggle', requireRole('owner', 'gerente', 'marketing'), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await adminService.toggleRecurringCampaign(req.params.id);
+    audit(req, 'push_campaign.toggle', 'push_campaign', req.params.id, result);
+    res.json({ data: result, message: result.recurrenceActive ? 'Campanha ativada.' : 'Campanha pausada.' });
   } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 
@@ -335,7 +482,9 @@ adminRouter.patch('/feedback/:id/status', requireRole('owner', 'gerente', 'marke
       res.status(400).json({ error: 'BadRequest', message: 'Status inválido.' });
       return;
     }
-    res.json({ data: await adminService.updateFeedbackStatus(req.params.id, status, admin.id), message: 'Status atualizado.' });
+    const data = await adminService.updateFeedbackStatus(req.params.id, status, admin.id);
+    audit(req, 'feedback.status_update', 'feedback', req.params.id, { status });
+    res.json({ data, message: 'Status atualizado.' });
   } catch (err) { res.status(400).json({ error: 'BadRequest', message: (err as Error).message }); }
 });
 

@@ -2,6 +2,83 @@ import { hasSupabase } from '../../config/env';
 import { supabase } from '../../config/supabase';
 import { MOCK_APPOINTMENTS } from '../appointments/appointments.mock';
 
+// ─── Push Campaign helpers ────────────────────────────────────────────────────
+
+function mapCampaign(row: any) {
+  return {
+    id: row.id,
+    title: row.title,
+    body: row.body,
+    segment: row.segment,
+    type: row.type ?? 'unico',
+    status: row.status,
+    scheduledAt: row.scheduled_at ?? null,
+    sentAt: row.sent_at ?? null,
+    sentCount: row.sent_count ?? 0,
+    createdAt: row.created_at,
+    recurrenceType: row.recurrence_type ?? null,
+    recurrenceDays: row.recurrence_days ?? null,
+    recurrenceInterval: row.recurrence_interval ?? null,
+    recurrenceHour: row.recurrence_hour ?? 9,
+    recurrenceNextSend: row.recurrence_next_send ?? null,
+    recurrenceActive: row.recurrence_active ?? true,
+  };
+}
+
+// Calculates the next UTC send timestamp for a recurring campaign.
+// Brazil has no DST since 2019, BRT is always UTC-3.
+function calcNextSend(
+  type: 'weekly' | 'interval',
+  days: number[],   // BRT day-of-week (0=Sun … 6=Sat)
+  interval: number, // days between sends
+  hour: number,     // BRT hour (0-23)
+  after: Date,      // calculate first occurrence AFTER this UTC timestamp
+): Date {
+  const BRT_OFFSET = 3 * 60 * 60 * 1000; // UTC-3
+
+  // Shift to BRT frame so UTC fields == BRT values
+  const brtAfter = new Date(after.getTime() - BRT_OFFSET);
+
+  if (type === 'interval') {
+    const brtTarget = new Date(brtAfter);
+    brtTarget.setUTCDate(brtTarget.getUTCDate() + interval);
+    brtTarget.setUTCHours(hour, 0, 0, 0);
+    const utcResult = new Date(brtTarget.getTime() + BRT_OFFSET);
+    if (utcResult <= after) {
+      brtTarget.setUTCDate(brtTarget.getUTCDate() + interval);
+      return new Date(brtTarget.getTime() + BRT_OFFSET);
+    }
+    return utcResult;
+  }
+
+  // Weekly: find next matching day-of-week (starting from tomorrow)
+  for (let d = 1; d <= 7; d++) {
+    const brtCandidate = new Date(brtAfter);
+    brtCandidate.setUTCDate(brtCandidate.getUTCDate() + d);
+    brtCandidate.setUTCHours(hour, 0, 0, 0);
+    if (days.includes(brtCandidate.getUTCDay())) {
+      return new Date(brtCandidate.getTime() + BRT_OFFSET);
+    }
+  }
+
+  // Fallback: tomorrow at target hour
+  const brtFallback = new Date(brtAfter);
+  brtFallback.setUTCDate(brtFallback.getUTCDate() + 1);
+  brtFallback.setUTCHours(hour, 0, 0, 0);
+  return new Date(brtFallback.getTime() + BRT_OFFSET);
+}
+
+const DEFAULT_SERVICE_CATEGORIES: { key: string; label: string }[] = [
+  { key: 'cilios',      label: 'Cílios' },
+  { key: 'sobrancelha', label: 'Sobrancelha' },
+  { key: 'cabelo',      label: 'Cabelo' },
+  { key: 'unhas',       label: 'Unhas' },
+  { key: 'maquiagem',   label: 'Maquiagem' },
+  { key: 'estetica',    label: 'Estética' },
+  { key: 'depilacao',   label: 'Depilação' },
+  { key: 'outros',      label: 'Outros' },
+];
+
 // ─── Mock data ────────────────────────────────────────────────────────────────
 
 export const MOCK_SERVICES = [
@@ -88,15 +165,22 @@ export const adminService = {
     if (error?.message?.includes('sort_order')) {
       ({ data, error } = await supabase.from('services').select('*').order('name'));
     }
-    return (data ?? []).map((s: any) => ({
-      id: s.id, name: s.name, description: s.description, price: s.price,
-      durationMinutes: s.duration_minutes, category: s.category,
-      imageUrl: s.image_url, isActive: s.is_active,
-      sortOrder: s.sort_order ?? 0,
-      bookingFeeType: s.booking_fee_type ?? 'fixed',
-      bookingFeeValue: s.booking_fee_value ?? 40,
-      variations: s.variations ?? [],
-    }));
+    return (data ?? []).map((s: any) => {
+      const cats: string[] = s.category
+        ? s.category.split(',').map((c: string) => c.trim()).filter(Boolean)
+        : [];
+      return {
+        id: s.id, name: s.name, description: s.description, price: s.price,
+        durationMinutes: s.duration_minutes,
+        category: cats[0] ?? s.category ?? '',
+        categories: cats,
+        imageUrl: s.image_url, isActive: s.is_active,
+        sortOrder: s.sort_order ?? 0,
+        bookingFeeType: s.booking_fee_type ?? 'fixed',
+        bookingFeeValue: s.booking_fee_value ?? 40,
+        variations: s.variations ?? [],
+      };
+    });
   },
 
   async reorderServices(items: { id: string; sortOrder: number }[]) {
@@ -117,9 +201,12 @@ export const adminService = {
 
   async createService(input: any) {
     if (!hasSupabase) { return { id: `svc-${Date.now()}`, variations: [], ...input }; }
+    const categoryStr = Array.isArray(input.categories) && input.categories.length
+      ? input.categories.join(',')
+      : (input.category ?? '');
     const { data, error } = await supabase.from('services').insert({
       name: input.name, description: input.description, price: input.price,
-      duration_minutes: input.durationMinutes, category: input.category,
+      duration_minutes: input.durationMinutes, category: categoryStr,
       image_url: input.imageUrl, is_active: input.isActive ?? true,
       booking_fee_type: input.bookingFeeType ?? 'fixed',
       booking_fee_value: input.bookingFeeValue ?? 40,
@@ -131,9 +218,12 @@ export const adminService = {
 
   async updateService(id: string, input: any) {
     if (!hasSupabase) { return { id, variations: [], ...input }; }
+    const categoryStr = Array.isArray(input.categories) && input.categories.length
+      ? input.categories.join(',')
+      : (input.category ?? '');
     const { data, error } = await supabase.from('services').update({
       name: input.name, description: input.description, price: input.price,
-      duration_minutes: input.durationMinutes, category: input.category,
+      duration_minutes: input.durationMinutes, category: categoryStr,
       image_url: input.imageUrl, is_active: input.isActive,
       booking_fee_type: input.bookingFeeType,
       booking_fee_value: input.bookingFeeValue,
@@ -432,6 +522,67 @@ export const adminService = {
     return { items: data ?? [], total: count ?? 0, page, limit };
   },
 
+  // ─── Service Categories ──────────────────────────────────────────────────────
+
+  async listServiceCategories(): Promise<{ key: string; label: string }[]> {
+    if (!hasSupabase) return DEFAULT_SERVICE_CATEGORIES;
+    const { data } = await supabase.from('app_settings').select('value').eq('key', 'service_categories').maybeSingle();
+    return (data as any)?.value ?? DEFAULT_SERVICE_CATEGORIES;
+  },
+
+  async upsertServiceCategory(cat: { key: string; label: string }, adminId: string) {
+    const current = await this.listServiceCategories();
+    const idx = current.findIndex((c) => c.key === cat.key);
+    if (idx >= 0) {
+      current[idx] = cat;
+    } else {
+      current.push(cat);
+    }
+    await this.setSetting('service_categories', current, adminId);
+    return current;
+  },
+
+  async deleteServiceCategory(key: string, adminId: string) {
+    if (hasSupabase) {
+      // Check if any service uses this category key
+      const { data: services } = await supabase
+        .from('services')
+        .select('id, name, category')
+        .eq('is_active', true);
+
+      const usedBy = (services ?? []).filter((s: any) => {
+        const cats = (s.category ?? '').split(',').map((c: string) => c.trim());
+        return cats.includes(key);
+      });
+
+      if (usedBy.length > 0) {
+        const names = usedBy.slice(0, 3).map((s: any) => `"${s.name}"`).join(', ');
+        const extra = usedBy.length > 3 ? ` e mais ${usedBy.length - 3}` : '';
+        throw new Error(
+          `Não é possível excluir: ${usedBy.length} serviço(s) usa(m) esta categoria (${names}${extra}). Remova ou altere a categoria dos serviços antes.`
+        );
+      }
+    }
+
+    const current = await this.listServiceCategories();
+    const updated = current.filter((c) => c.key !== key);
+    await this.setSetting('service_categories', updated, adminId);
+    return updated;
+  },
+
+  // ─── Professional Specialties ────────────────────────────────────────────────
+
+  async listProfessionalSpecialties(): Promise<string[]> {
+    if (!hasSupabase) return ['Coloração Avançada', 'Técnica Balayage', 'Tratamento Capilar'];
+    const { data } = await supabase.from('app_settings').select('value').eq('key', 'professional_specialties').maybeSingle();
+    const val = (data as any)?.value;
+    return Array.isArray(val) ? val : [];
+  },
+
+  async saveProfessionalSpecialties(specialties: string[], adminId: string): Promise<string[]> {
+    return this.setSetting('professional_specialties', specialties, adminId);
+  },
+
   // ─── App Settings ────────────────────────────────────────────────────────────
 
   async getSetting(key: string) {
@@ -447,7 +598,10 @@ export const adminService = {
 
   async setSetting(key: string, value: any, adminId: string) {
     if (!hasSupabase) return value;
-    await supabase.from('app_settings').upsert({ key, value, updated_by: adminId, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert({ key, value, updated_by: adminId, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+    if (error) throw new Error(`Erro ao salvar configuração: ${error.message}`);
     return value;
   },
 
@@ -482,7 +636,17 @@ export const adminService = {
       .select('*', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
-    return { items: data ?? [], total: count ?? 0, page, limit };
+    const items = (data ?? []).map((row: any) => ({
+      id: row.id,
+      adminEmail: row.admin_email,
+      action: row.action,
+      entityType: row.entity_type ?? null,
+      entityId: row.entity_id ?? null,
+      changes: row.changes ?? null,
+      ipAddress: row.ip_address ?? null,
+      createdAt: row.created_at,
+    }));
+    return { items, total: count ?? 0, page, limit };
   },
 
   async createAuditLog(data: { adminUserId: string; adminEmail: string; action: string; entityType?: string; entityId?: string; changes?: any; ipAddress?: string }) {
@@ -503,33 +667,54 @@ export const adminService = {
   async listPushCampaigns() {
     if (!hasSupabase) {
       return [
-        { id: 'camp-1', title: 'Volta das aulas', body: 'Cuide do seu cabelo neste começo de ano!', segment: 'todos', status: 'enviada', sentAt: new Date().toISOString(), sentCount: 45 },
+        { id: 'camp-1', title: 'Volta das aulas', body: 'Cuide do seu cabelo neste começo de ano!', segment: 'todos', type: 'unico', status: 'enviada', sentAt: new Date().toISOString(), sentCount: 45 },
       ];
     }
     const { data } = await supabase.from('push_campaigns').select('*').order('created_at', { ascending: false });
-    return data ?? [];
+    return (data ?? []).map(mapCampaign);
   },
 
   async createPushCampaign(input: any, adminId: string) {
-    if (!hasSupabase) { return { id: `camp-${Date.now()}`, sentCount: 0, ...input }; }
+    const type: 'unico' | 'manual' | 'recorrente' = input.type ?? 'unico';
+    if (!hasSupabase) { return { id: `camp-${Date.now()}`, sentCount: 0, type, ...input }; }
+
+    let nextSend: string | null = null;
+    if (type === 'recorrente') {
+      const rType: 'weekly' | 'interval' = input.recurrenceType ?? 'weekly';
+      nextSend = calcNextSend(
+        rType,
+        input.recurrenceDays ?? [],
+        input.recurrenceInterval ?? 7,
+        input.recurrenceHour ?? 9,
+        new Date(),
+      ).toISOString();
+    }
+
     const { data, error } = await supabase.from('push_campaigns').insert({
-      title: input.title, body: input.body, segment: input.segment ?? 'todos',
-      status: input.scheduledAt ? 'agendada' : 'rascunho',
-      scheduled_at: input.scheduledAt, created_by: adminId,
+      title: input.title,
+      body: input.body,
+      segment: input.segment ?? 'todos',
+      type,
+      status: type === 'manual' ? 'manual' : type === 'recorrente' ? 'recorrente' : (input.scheduledAt ? 'agendada' : 'rascunho'),
+      scheduled_at: input.scheduledAt ?? null,
+      created_by: adminId,
+      recurrence_type: type === 'recorrente' ? (input.recurrenceType ?? 'weekly') : null,
+      recurrence_days: type === 'recorrente' ? (input.recurrenceDays ?? null) : null,
+      recurrence_interval: type === 'recorrente' ? (input.recurrenceInterval ?? null) : null,
+      recurrence_hour: type === 'recorrente' ? (input.recurrenceHour ?? 9) : null,
+      recurrence_next_send: nextSend,
+      recurrence_active: type === 'recorrente' ? true : null,
     }).select().single();
     if (error) throw new Error(error.message);
-    return data;
+    return mapCampaign(data);
   },
 
   async sendPushCampaign(campaignId: string) {
-    // Import push service dynamically to avoid circular deps
     const { pushService } = await import('../../services/push.service');
 
     if (!hasSupabase) {
-      // Mock: simulate sending to all mock users
-      const mockCount = 3;
-      console.log(`[push-campaigns] Mock send: campaign ${campaignId}, ${mockCount} tokens`);
-      return { sent: mockCount, failed: 0 };
+      console.log(`[push-campaigns] Mock send: campaign ${campaignId}`);
+      return { sent: 3, failed: 0 };
     }
 
     const { data: campaign, error: ce } = await supabase
@@ -539,7 +724,11 @@ export const adminService = {
       .single();
 
     if (ce || !campaign) throw new Error('Campanha não encontrada.');
-    if (campaign.status === 'enviada') throw new Error('Campanha já foi enviada.');
+
+    // Only block resend for single-use campaigns that are already sent
+    if (campaign.type !== 'manual' && campaign.status === 'enviada') {
+      throw new Error('Campanha de envio único já foi enviada.');
+    }
 
     // Fetch active push tokens based on segment
     let query = supabase.from('push_tokens').select('user_id, token').eq('is_active', true);
@@ -569,13 +758,78 @@ export const adminService = {
       failed = results.failed;
     }
 
-    // Update campaign status
-    await supabase
-      .from('push_campaigns')
-      .update({ status: 'enviada', sent_count: sent, sent_at: new Date().toISOString() })
-      .eq('id', campaignId);
+    const now = new Date();
+
+    if (campaign.type === 'manual') {
+      await supabase
+        .from('push_campaigns')
+        .update({ sent_count: (campaign.sent_count ?? 0) + sent, sent_at: now.toISOString() })
+        .eq('id', campaignId);
+    } else if (campaign.type === 'recorrente') {
+      // Calculate next occurrence after now
+      const nextSend = calcNextSend(
+        campaign.recurrence_type ?? 'weekly',
+        campaign.recurrence_days ?? [],
+        campaign.recurrence_interval ?? 7,
+        campaign.recurrence_hour ?? 9,
+        now,
+      );
+      await supabase
+        .from('push_campaigns')
+        .update({
+          sent_count: (campaign.sent_count ?? 0) + sent,
+          sent_at: now.toISOString(),
+          recurrence_next_send: nextSend.toISOString(),
+        })
+        .eq('id', campaignId);
+    } else {
+      // Single-use: mark as sent permanently
+      await supabase
+        .from('push_campaigns')
+        .update({ status: 'enviada', sent_count: sent, sent_at: now.toISOString() })
+        .eq('id', campaignId);
+    }
 
     return { sent, failed };
+  },
+
+  async processRecurringCampaigns(): Promise<{ processed: number }> {
+    if (!hasSupabase) return { processed: 0 };
+    const now = new Date();
+    const { data: campaigns } = await supabase
+      .from('push_campaigns')
+      .select('id, title')
+      .eq('type', 'recorrente')
+      .eq('status', 'recorrente')
+      .eq('recurrence_active', true)
+      .lte('recurrence_next_send', now.toISOString());
+
+    if (!campaigns?.length) return { processed: 0 };
+
+    let processed = 0;
+    for (const c of campaigns as any[]) {
+      try {
+        await adminService.sendPushCampaign(c.id);
+        console.log(`[push-recurring] Sent campaign "${c.title}" (${c.id})`);
+        processed++;
+      } catch (err) {
+        console.error(`[push-recurring] Failed to send campaign ${c.id}:`, (err as Error).message);
+      }
+    }
+    return { processed };
+  },
+
+  async toggleRecurringCampaign(campaignId: string): Promise<{ recurrenceActive: boolean }> {
+    if (!hasSupabase) return { recurrenceActive: false };
+    const { data: current } = await supabase
+      .from('push_campaigns')
+      .select('recurrence_active')
+      .eq('id', campaignId)
+      .single();
+    if (!current) throw new Error('Campanha não encontrada.');
+    const next = !(current as any).recurrence_active;
+    await supabase.from('push_campaigns').update({ recurrence_active: next }).eq('id', campaignId);
+    return { recurrenceActive: next };
   },
 
   // ─── Feedback ────────────────────────────────────────────────────────────────

@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, AuthTokens } from '../types';
 import { setAuthToken, registerUnauthorizedHandler } from '../services/api/client';
+import { pushNotificationsService } from '../services/api/notifications';
 
 interface AuthState {
   user: User | null;
@@ -28,6 +29,8 @@ export const useAuthStore = create<AuthState>()(
       setUser: (user, tokens) => {
         setAuthToken(tokens.accessToken);
         set({ user, tokens, isAuthenticated: true });
+        // Register device for push notifications after every login/rehydrate
+        pushNotificationsService.registerPushToken().catch(console.warn);
       },
 
       updateUser: (partial) =>

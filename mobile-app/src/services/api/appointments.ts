@@ -2,9 +2,19 @@ import { apiClient, USE_MOCK } from './client';
 import { Appointment, BookingFlow, PaymentMethod, Service, Professional } from '../../types';
 import { MOCK_APPOINTMENTS, BOOKING_FEE } from '../../mocks/data';
 
+export interface CardData {
+  number: string;
+  holderName: string;
+  expiryMonth: string;
+  expiryYear: string;
+  cvv: string;
+  brand?: string;
+}
+
 export interface CreateAppointmentPayload {
   booking: BookingFlow;
   paymentMethod: PaymentMethod;
+  cardData?: CardData;
 }
 
 export interface CreateAppointmentResult {
@@ -141,6 +151,7 @@ export const appointmentsService = {
     const { data: payData } = await apiClient.post('/payments/booking-fee', {
       appointmentId: appointment.id,
       method: payload.paymentMethod,
+      ...(payload.cardData ? { cardData: payload.cardData } : {}),
     });
 
     const result: CreateAppointmentResult = {

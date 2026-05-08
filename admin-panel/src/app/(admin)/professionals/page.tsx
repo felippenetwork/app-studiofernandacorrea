@@ -1,28 +1,256 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Pencil, Trash2, Loader2, X, Star } from 'lucide-react';
-import { professionalsApi } from '@/lib/api';
-import { Professional } from '@/types';
-import { getErrorMessage } from '@/lib/utils';
+import { Plus, Pencil, Trash2, Loader2, X, Star, ChevronDown, Check, Tag } from 'lucide-react';
+import { professionalsApi, servicesApi, professionalSpecialtiesApi } from '@/lib/api';
+import { Professional, Service } from '@/types';
+import { getErrorMessage, cn } from '@/lib/utils';
 
 const schema = z.object({
   name: z.string().min(2, 'Nome obrigatório'),
   bio: z.string().optional(),
   avatarUrl: z.string().url('URL inválida').optional().or(z.literal('')),
-  specialtiesRaw: z.string().optional(),
+  specialties: z.array(z.string()).default([]),
   isActive: z.boolean().default(true),
   trinksEmployeeId: z.string().optional(),
 });
 type ProfForm = z.infer<typeof schema>;
 
+// ─── Specialties multi-select ─────────────────────────────────────────────────
+
+function SpecialtiesSelect({
+  value,
+  onChange,
+  services,
+  customSpecialties,
+}: {
+  value: string[];
+  onChange: (v: string[]) => void;
+  services: Service[];
+  customSpecialties: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onOutside);
+    return () => document.removeEventListener('mousedown', onOutside);
+  }, []);
+
+  const activeServices = services.filter((s) => s.isActive);
+  const q = search.toLowerCase();
+  const filteredServices = activeServices.filter((s) => s.name.toLowerCase().includes(q));
+  const filteredCustom = customSpecialties.filter((s) => s.toLowerCase().includes(q));
+  const hasResults = filteredServices.length > 0 || filteredCustom.length > 0;
+
+  function toggle(name: string) {
+    onChange(value.includes(name) ? value.filter((v) => v !== name) : [...value, name]);
+  }
+
+  function remove(name: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    onChange(value.filter((v) => v !== name));
+  }
+
+  function OptionRow({ name }: { name: string }) {
+    const selected = value.includes(name);
+    return (
+      <button
+        type="button"
+        onClick={() => toggle(name)}
+        className={cn(
+          'w-full flex items-center gap-3 px-3 py-2.5 text-sm text-left transition-colors',
+          selected ? 'bg-[#C9A4A0]/10 text-[#9b6f6b]' : 'hover:bg-gray-50 text-gray-700'
+        )}
+      >
+        <span className={cn(
+          'w-4 h-4 rounded border flex items-center justify-center flex-shrink-0',
+          selected ? 'bg-[#C9A4A0] border-[#C9A4A0]' : 'border-gray-300'
+        )}>
+          {selected && <Check className="w-3 h-3 text-white" />}
+        </span>
+        {name}
+      </button>
+    );
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <div
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          'min-h-10 w-full px-3 py-2 border rounded-lg text-sm cursor-pointer flex flex-wrap gap-1.5 items-center transition-colors',
+          open ? 'border-[#C9A4A0] ring-2 ring-[#C9A4A0]/20' : 'border-gray-200 hover:border-gray-300'
+        )}
+      >
+        {value.length === 0 ? (
+          <span className="text-gray-400 select-none">Selecione especialidades…</span>
+        ) : (
+          value.map((name) => (
+            <span key={name} className="inline-flex items-center gap-1 bg-[#C9A4A0]/15 text-[#9b6f6b] text-xs font-medium px-2 py-0.5 rounded-full">
+              {name}
+              <button type="button" onClick={(e) => remove(name, e)} className="rounded-full hover:bg-[#C9A4A0]/30 p-0.5">
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </span>
+          ))
+        )}
+        <ChevronDown className={cn('w-4 h-4 text-gray-400 ml-auto flex-shrink-0 transition-transform', open && 'rotate-180')} />
+      </div>
+
+      {open && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-gray-100">
+            <input
+              autoFocus
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar…"
+              className="w-full h-8 px-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#C9A4A0]"
+            />
+          </div>
+          <div className="max-h-56 overflow-y-auto">
+            {!hasResults && (
+              <p className="text-sm text-gray-400 text-center py-4">Nenhum resultado</p>
+            )}
+            {filteredServices.length > 0 && (
+              <>
+                <p className="px-3 pt-2 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">Serviços</p>
+                {filteredServices.map((s) => <OptionRow key={s.id} name={s.name} />)}
+              </>
+            )}
+            {filteredCustom.length > 0 && (
+              <>
+                <p className="px-3 pt-2 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">Especialidades</p>
+                {filteredCustom.map((s) => <OptionRow key={s} name={s} />)}
+              </>
+            )}
+          </div>
+          {value.length > 0 && (
+            <div className="p-2 border-t border-gray-100 flex justify-between items-center">
+              <span className="text-xs text-gray-400">{value.length} selecionado{value.length > 1 ? 's' : ''}</span>
+              <button type="button" onClick={() => onChange([])} className="text-xs text-red-400 hover:text-red-600">Limpar tudo</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Specialty Manager modal ──────────────────────────────────────────────────
+
+function SpecialtyManager({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient();
+  const [newLabel, setNewLabel] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: specialties = [] } = useQuery<string[]>({
+    queryKey: ['admin-professional-specialties'],
+    queryFn: professionalSpecialtiesApi.list,
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: (list: string[]) => professionalSpecialtiesApi.save(list),
+    onSuccess: (data) => { qc.setQueryData(['admin-professional-specialties'], data); setError(null); },
+    onError: (e) => setError(getErrorMessage(e)),
+  });
+
+  function add() {
+    const label = newLabel.trim();
+    if (!label) return;
+    if (specialties.includes(label)) { setError('Especialidade já existe.'); return; }
+    saveMutation.mutate([...specialties, label]);
+    setNewLabel('');
+  }
+
+  function remove(label: string) {
+    saveMutation.mutate(specialties.filter((s) => s !== label));
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div>
+            <h3 className="font-semibold text-gray-900">Gerenciar Especialidades</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Aparecem só no perfil da profissional, não no menu do app.</p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100 text-gray-400"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
+
+          {/* Add new */}
+          <div className="flex gap-2">
+            <input
+              value={newLabel}
+              onChange={(e) => { setNewLabel(e.target.value); setError(null); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+              placeholder="Nova especialidade… ex: Técnica Balayage"
+              className="flex-1 h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]"
+            />
+            <button
+              type="button"
+              onClick={add}
+              disabled={!newLabel.trim() || saveMutation.isPending}
+              className="h-10 px-4 bg-[#C9A4A0] hover:bg-[#b8918d] disabled:opacity-50 text-white rounded-lg text-sm font-medium flex items-center gap-1.5 transition-colors"
+            >
+              {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              Adicionar
+            </button>
+          </div>
+
+          {/* List */}
+          <div className="space-y-1.5 max-h-64 overflow-y-auto">
+            {specialties.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-6">Nenhuma especialidade cadastrada ainda.</p>
+            ) : (
+              specialties.map((s) => (
+                <div key={s} className="flex items-center justify-between gap-3 px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <Tag className="w-3.5 h-3.5 text-[#C9A4A0] flex-shrink-0" />
+                    <span className="text-sm text-gray-700">{s}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => remove(s)}
+                    disabled={saveMutation.isPending}
+                    className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 disabled:opacity-40 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="px-6 pb-6">
+          <button onClick={onClose} className="w-full h-10 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function ProfessionalsPage() {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<Professional | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [showSpecialtyManager, setShowSpecialtyManager] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,7 +259,18 @@ export default function ProfessionalsPage() {
     queryFn: professionalsApi.list,
   });
 
-  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<ProfForm>({ resolver: zodResolver(schema) });
+  const { data: services = [] } = useQuery<Service[]>({
+    queryKey: ['admin-services'],
+    queryFn: servicesApi.list,
+  });
+
+  const { data: customSpecialties = [] } = useQuery<string[]>({
+    queryKey: ['admin-professional-specialties'],
+    queryFn: professionalSpecialtiesApi.list,
+  });
+
+  const { register, handleSubmit, reset, control, formState: { errors, isSubmitting } } =
+    useForm<ProfForm>({ resolver: zodResolver(schema) });
 
   const createMutation = useMutation({
     mutationFn: (data: any) => professionalsApi.create(data),
@@ -52,13 +291,20 @@ export default function ProfessionalsPage() {
 
   function openCreate() {
     setEditing(null);
-    reset({ name: '', bio: '', avatarUrl: '', specialtiesRaw: '', isActive: true });
+    reset({ name: '', bio: '', avatarUrl: '', specialties: [], isActive: true, trinksEmployeeId: '' });
     setShowForm(true); setError(null);
   }
 
   function openEdit(p: Professional) {
     setEditing(p);
-    reset({ name: p.name, bio: p.bio ?? '', avatarUrl: p.avatarUrl ?? '', specialtiesRaw: p.specialties.join(', '), isActive: p.isActive, trinksEmployeeId: p.trinksEmployeeId });
+    reset({
+      name: p.name,
+      bio: p.bio ?? '',
+      avatarUrl: p.avatarUrl ?? '',
+      specialties: p.specialties ?? [],
+      isActive: p.isActive,
+      trinksEmployeeId: p.trinksEmployeeId ?? '',
+    });
     setShowForm(true); setError(null);
   }
 
@@ -66,10 +312,9 @@ export default function ProfessionalsPage() {
 
   const onSubmit = (data: ProfForm) => {
     setError(null);
-    const { specialtiesRaw, avatarUrl, trinksEmployeeId, ...rest } = data;
+    const { avatarUrl, trinksEmployeeId, ...rest } = data;
     const payload = {
       ...rest,
-      specialties: (specialtiesRaw ?? '').split(',').map((s) => s.trim()).filter(Boolean),
       ...(avatarUrl ? { avatarUrl } : {}),
       ...(trinksEmployeeId ? { trinksEmployeeId } : {}),
     };
@@ -87,9 +332,20 @@ export default function ProfessionalsPage() {
           <h2 className="text-lg font-semibold text-gray-900">Profissionais ({professionals.length})</h2>
           <p className="text-sm text-gray-500">Gerencie a equipe do studio.</p>
         </div>
-        <button onClick={openCreate} className="flex items-center gap-2 bg-[#C9A4A0] hover:bg-[#b8918d] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-          <Plus className="w-4 h-4" /> Nova profissional
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowSpecialtyManager(true)}
+            className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            <Tag className="w-4 h-4" /> Especialidades
+          </button>
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 bg-[#C9A4A0] hover:bg-[#b8918d] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Nova profissional
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -134,6 +390,9 @@ export default function ProfessionalsPage() {
         ))}
       </div>
 
+      {/* Specialty Manager Modal */}
+      {showSpecialtyManager && <SpecialtyManager onClose={() => setShowSpecialtyManager(false)} />}
+
       {/* Form Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -154,8 +413,25 @@ export default function ProfessionalsPage() {
                 <textarea {...register('bio')} rows={2} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0] resize-none" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Especialidades (separar por vírgula)</label>
-                <input {...register('specialtiesRaw')} placeholder="Coloração, Mechas, Progressiva" className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]" />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Especialidades</label>
+                <Controller
+                  name="specialties"
+                  control={control}
+                  render={({ field }) => (
+                    <SpecialtiesSelect
+                      value={field.value}
+                      onChange={field.onChange}
+                      services={services}
+                      customSpecialties={customSpecialties}
+                    />
+                  )}
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Serviços do menu + especialidades cadastradas.{' '}
+                  <button type="button" onClick={() => setShowSpecialtyManager(true)} className="text-[#C9A4A0] hover:underline">
+                    Gerenciar especialidades
+                  </button>
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">URL do avatar</label>

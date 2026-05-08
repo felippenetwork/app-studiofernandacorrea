@@ -179,6 +179,16 @@ app.get('/api/services', async (_req, res) => {
   }
 });
 
+// ─── Public service categories (no auth) ─────────────────────────────────────
+app.get('/api/service-categories', async (_req, res) => {
+  try {
+    const categories = await adminService.listServiceCategories();
+    res.json({ data: categories });
+  } catch {
+    res.json({ data: [] });
+  }
+});
+
 // ─── Public config (no auth) ──────────────────────────────────────────────────
 // Returns only safe, non-sensitive public settings for the mobile app
 app.get('/api/config/public', async (_req, res) => {

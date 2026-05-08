@@ -19,8 +19,8 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Plus, Pencil, Trash2, Loader2, Search, X, ChevronDown, ChevronUp, Layers, GripVertical } from 'lucide-react';
-import { servicesApi } from '@/lib/api';
+import { Plus, Pencil, Trash2, Loader2, Search, X, ChevronDown, ChevronUp, Layers, GripVertical, Tag, Check } from 'lucide-react';
+import { servicesApi, serviceCategoriesApi } from '@/lib/api';
 import { Service, ServiceVariation } from '@/types';
 import { formatCurrency, formatDuration } from '@/lib/formatters';
 import { getErrorMessage, cn } from '@/lib/utils';
@@ -30,13 +30,284 @@ const schema = z.object({
   description: z.string().optional(),
   price: z.coerce.number().nonnegative('Preço inválido'),
   durationMinutes: z.coerce.number().int().positive('Duração obrigatória'),
-  category: z.string().min(1, 'Categoria obrigatória'),
+  categories: z.array(z.string()).min(1, 'Selecione ao menos uma categoria'),
   imageUrl: z.string().url('URL inválida').optional().or(z.literal('')),
   isActive: z.boolean().default(true),
 });
 type ServiceForm = z.infer<typeof schema>;
 
-const CATEGORIES = ['cabelo', 'unhas', 'pele', 'maquiagem', 'sobrancelha', 'cílios', 'outros'];
+// ─── Category Manager ─────────────────────────────────────────────────────────
+
+// ─── Sortable category row ────────────────────────────────────────────────────
+
+function SortableCategoryRow({
+  cat,
+  editingKey,
+  editLabel,
+  onEditStart,
+  onEditChange,
+  onEditConfirm,
+  onEditCancel,
+  onRemove,
+  isPending,
+}: {
+  cat: { key: string; label: string };
+  editingKey: string | null;
+  editLabel: string;
+  onEditStart: () => void;
+  onEditChange: (v: string) => void;
+  onEditConfirm: () => void;
+  onEditCancel: () => void;
+  onRemove: () => void;
+  isPending: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cat.key });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn('flex items-center gap-2 p-2.5 bg-gray-50 rounded-lg border border-gray-100', isDragging && 'shadow-lg bg-white')}
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing p-1 rounded text-gray-300 hover:text-gray-500 touch-none flex-shrink-0"
+      >
+        <GripVertical className="w-4 h-4" />
+      </button>
+
+      {editingKey === cat.key ? (
+        <>
+          <input
+            value={editLabel}
+            onChange={(e) => onEditChange(e.target.value)}
+            className="flex-1 h-8 px-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#C9A4A0]"
+            autoFocus
+            onKeyDown={(e) => { if (e.key === 'Enter') onEditConfirm(); if (e.key === 'Escape') onEditCancel(); }}
+          />
+          <button onClick={onEditConfirm} disabled={isPending || !editLabel.trim()} className="p-1.5 rounded hover:bg-green-50 text-green-600 disabled:opacity-40">
+            <Check className="w-4 h-4" />
+          </button>
+          <button onClick={onEditCancel} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
+            <X className="w-4 h-4" />
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-800">{cat.label}</p>
+          </div>
+          <button onClick={onEditStart} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700">
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={onRemove} disabled={isPending} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 disabled:opacity-40">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Category Manager modal ───────────────────────────────────────────────────
+
+function CategoryManager({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient();
+  const [newKey, setNewKey] = useState('');
+  const [newLabel, setNewLabel] = useState('');
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [localOrder, setLocalOrder] = useState<{ key: string; label: string }[] | null>(null);
+  const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const { data: categories = [] } = useQuery<{ key: string; label: string }[]>({
+    queryKey: ['admin-service-categories'],
+    queryFn: serviceCategoriesApi.list,
+  });
+
+  // Keep localOrder in sync when server data arrives (but don't override user drags)
+  const displayList = localOrder ?? categories;
+
+  const upsertMutation = useMutation({
+    mutationFn: (cats: { key: string; label: string }[]) =>
+      serviceCategoriesApi.reorder(cats),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-service-categories'] }),
+  });
+
+  const editMutation = useMutation({
+    mutationFn: (cat: { key: string; label: string }) => serviceCategoriesApi.upsert(cat),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-service-categories'] }); setLocalOrder(null); setEditingKey(null); setError(null); },
+    onError: (e) => setError(getErrorMessage(e)),
+  });
+
+  const addMutation = useMutation({
+    mutationFn: (cat: { key: string; label: string }) => serviceCategoriesApi.upsert(cat),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-service-categories'] }); setLocalOrder(null); setNewKey(''); setNewLabel(''); setError(null); },
+    onError: (e) => setError(getErrorMessage(e)),
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (key: string) => serviceCategoriesApi.remove(key),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-service-categories'] });
+      setLocalOrder(null);
+      setConfirmDeleteKey(null);
+      setDeleteError(null);
+    },
+    onError: (e) => {
+      setDeleteError(getErrorMessage(e));
+    },
+  });
+
+  function slugify(str: string) {
+    return str.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const base = localOrder ?? categories;
+    const oldIdx = base.findIndex((c) => c.key === active.id);
+    const newIdx = base.findIndex((c) => c.key === over.id);
+    if (oldIdx === -1 || newIdx === -1) return;
+    const reordered = arrayMove(base, oldIdx, newIdx);
+    setLocalOrder(reordered);
+    upsertMutation.mutate(reordered);
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col max-h-[85vh]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <Tag className="w-4 h-4 text-[#C9A4A0]" />
+            <h3 className="font-semibold text-gray-900">Gerenciar Categorias</h3>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100 text-gray-400"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="p-6 space-y-5 overflow-y-auto flex-1">
+          {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
+
+          {/* Sortable list */}
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={displayList.map((c) => c.key)} strategy={verticalListSortingStrategy}>
+              <div className="space-y-2">
+                {displayList.map((cat) => (
+                  <SortableCategoryRow
+                    key={cat.key}
+                    cat={cat}
+                    editingKey={editingKey}
+                    editLabel={editLabel}
+                    onEditStart={() => { setEditingKey(cat.key); setEditLabel(cat.label); }}
+                    onEditChange={setEditLabel}
+                    onEditConfirm={() => editMutation.mutate({ key: cat.key, label: editLabel })}
+                    onEditCancel={() => setEditingKey(null)}
+                    onRemove={() => { setConfirmDeleteKey(cat.key); setDeleteError(null); }}
+                    isPending={editMutation.isPending || removeMutation.isPending}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+
+          {/* Add new */}
+          <div className="border-t border-gray-100 pt-4 space-y-3">
+            <p className="text-sm font-medium text-gray-700">Nova categoria</p>
+            <div className="space-y-2">
+              <input
+                value={newLabel}
+                onChange={(e) => { setNewLabel(e.target.value); setNewKey(slugify(e.target.value)); }}
+                placeholder="Nome da categoria  ex: Massagem"
+                className="w-full h-9 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]"
+                onKeyDown={(e) => { if (e.key === 'Enter' && newLabel.trim() && newKey) addMutation.mutate({ key: newKey, label: newLabel.trim() }); }}
+              />
+              {newLabel && (
+                <p className="text-xs text-gray-400">Chave: <span className="font-mono text-gray-600">{newKey}</span></p>
+              )}
+            </div>
+            <button
+              onClick={() => addMutation.mutate({ key: newKey, label: newLabel.trim() })}
+              disabled={addMutation.isPending || !newLabel.trim() || !newKey}
+              className="w-full h-9 bg-[#C9A4A0] hover:bg-[#b8918d] disabled:opacity-50 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2"
+            >
+              {addMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              Adicionar
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Confirm delete dialog */}
+      {confirmDeleteKey && (() => {
+        const catLabel = displayList.find(c => c.key === confirmDeleteKey)?.label ?? confirmDeleteKey;
+        const keyToDelete = confirmDeleteKey; // capture for safe closure
+        return (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+              {deleteError ? (
+                <>
+                  <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center mx-auto">
+                    <Tag className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div className="text-center">
+                    <h4 className="font-semibold text-gray-900 mb-2">Não foi possível excluir</h4>
+                    <p className="text-sm text-gray-600">{deleteError}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setConfirmDeleteKey(null); setDeleteError(null); }}
+                    className="w-full h-10 bg-[#C9A4A0] hover:bg-[#b8918d] text-white rounded-lg text-sm font-medium"
+                  >
+                    Entendi
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center mx-auto">
+                    <Trash2 className="w-5 h-5 text-red-600" />
+                  </div>
+                  <div className="text-center">
+                    <h4 className="font-semibold text-gray-900 mb-2">Excluir categoria?</h4>
+                    <p className="text-sm text-gray-600">
+                      A categoria <strong>"{catLabel}"</strong> será removida permanentemente.
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => { setConfirmDeleteKey(null); setDeleteError(null); }}
+                      disabled={removeMutation.isPending}
+                      className="flex-1 h-10 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeMutation.mutate(keyToDelete)}
+                      disabled={removeMutation.isPending}
+                      className="flex-1 h-10 bg-red-500 hover:bg-red-600 disabled:opacity-60 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2"
+                    >
+                      {removeMutation.isPending
+                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Excluindo…</>
+                        : 'Sim, excluir'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
 
 // ─── Variation Editor ─────────────────────────────────────────────────────────
 
@@ -181,11 +452,13 @@ function SortableRow({
   onEdit,
   onDelete,
   isDragging,
+  categoryList,
 }: {
   service: Service;
   onEdit: (s: Service) => void;
   onDelete: (id: string) => void;
   isDragging: boolean;
+  categoryList: { key: string; label: string }[];
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: service.id });
 
@@ -217,7 +490,14 @@ function SortableRow({
         <p className="font-medium text-gray-900">{service.name}</p>
         <VariationsBadge service={service} />
       </td>
-      <td className="px-4 py-3.5 text-gray-600 capitalize">{service.category}</td>
+      <td className="px-4 py-3.5 text-gray-600">
+        <div className="flex flex-wrap gap-1">
+          {(service.categories?.length ? service.categories : [service.category]).map((c) => {
+            const label = categoryList.find((cat) => cat.key === c)?.label ?? c;
+            return <span key={c} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">{label}</span>;
+          })}
+        </div>
+      </td>
       <td className="px-4 py-3.5 text-gray-900"><PriceCell service={service} /></td>
       <td className="px-4 py-3.5 text-gray-600">{formatDuration(service.durationMinutes)}</td>
       <td className="px-4 py-3.5">
@@ -255,6 +535,12 @@ export default function ServicesPage() {
   const [feeType, setFeeType] = useState<'fixed' | 'percentage'>('fixed');
   const [feeValue, setFeeValue] = useState<number>(40);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [showCategories, setShowCategories] = useState(false);
+
+  const { data: categories = [] } = useQuery<{ key: string; label: string }[]>({
+    queryKey: ['admin-service-categories'],
+    queryFn: serviceCategoriesApi.list,
+  });
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -271,19 +557,31 @@ export default function ServicesPage() {
 
   const createMutation = useMutation({
     mutationFn: (data: any) => servicesApi.create(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-services'] }); closeForm(); },
+    onSuccess: () => {
+      setLocalOrder(null);
+      qc.invalidateQueries({ queryKey: ['admin-services'] });
+      closeForm();
+    },
     onError: (e) => setError(getErrorMessage(e)),
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => servicesApi.update(id, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-services'] }); closeForm(); },
+    onSuccess: () => {
+      setLocalOrder(null);
+      qc.invalidateQueries({ queryKey: ['admin-services'] });
+      closeForm();
+    },
     onError: (e) => setError(getErrorMessage(e)),
   });
 
   const deleteMutation = useMutation({
     mutationFn: servicesApi.remove,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-services'] }); setDeleteId(null); },
+    onSuccess: () => {
+      setLocalOrder(null);
+      qc.invalidateQueries({ queryKey: ['admin-services'] });
+      setDeleteId(null);
+    },
   });
 
   const reorderMutation = useMutation({
@@ -295,7 +593,7 @@ export default function ServicesPage() {
     setVariations([]);
     setFeeType('fixed');
     setFeeValue(40);
-    reset({ name: '', description: '', price: 0, durationMinutes: 60, category: 'cabelo', isActive: true });
+    reset({ name: '', description: '', price: 0, durationMinutes: 60, categories: [], isActive: true });
     setShowForm(true);
     setError(null);
   }
@@ -305,10 +603,11 @@ export default function ServicesPage() {
     setVariations(s.variations ?? []);
     setFeeType(s.bookingFeeType ?? 'fixed');
     setFeeValue(s.bookingFeeValue ?? 40);
+    const cats = s.categories?.length ? s.categories : (s.category ? [s.category] : []);
     reset({
       name: s.name, description: s.description ?? '',
       price: s.price, durationMinutes: s.durationMinutes,
-      category: s.category, imageUrl: s.imageUrl ?? '',
+      categories: cats, imageUrl: s.imageUrl ?? '',
       isActive: s.isActive,
     });
     setShowForm(true);
@@ -325,7 +624,13 @@ export default function ServicesPage() {
 
   const onSubmit = (data: ServiceForm) => {
     setError(null);
-    const payload = { ...data, variations, bookingFeeType: feeType, bookingFeeValue: feeValue };
+    const payload = {
+      ...data,
+      category: data.categories[0],
+      variations,
+      bookingFeeType: feeType,
+      bookingFeeValue: feeValue,
+    };
     if (editing) {
       updateMutation.mutate({ id: editing.id, data: payload });
     } else {
@@ -387,15 +692,22 @@ export default function ServicesPage() {
 
   return (
     <div className="space-y-6">
+      {showCategories && <CategoryManager onClose={() => setShowCategories(false)} />}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Serviços ({services.length})</h2>
           <p className="text-sm text-gray-500">Arraste para reordenar. A ordem reflete no app.</p>
         </div>
-        <button onClick={openCreate} className="flex items-center gap-2 bg-[#C9A4A0] hover:bg-[#b8918d] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-          <Plus className="w-4 h-4" /> Novo serviço
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowCategories(true)} className="flex items-center gap-2 border border-gray-200 hover:border-[#C9A4A0] text-gray-600 hover:text-[#C9A4A0] text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+            <Tag className="w-4 h-4" /> Categorias
+          </button>
+          <button onClick={openCreate} className="flex items-center gap-2 bg-[#C9A4A0] hover:bg-[#b8918d] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+            <Plus className="w-4 h-4" /> Novo serviço
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -461,6 +773,7 @@ export default function ServicesPage() {
                       onEdit={openEdit}
                       onDelete={setDeleteId}
                       isDragging={draggingId === s.id}
+                      categoryList={categories}
                     />
                   ))}
                 </tbody>
@@ -495,7 +808,7 @@ export default function ServicesPage() {
                 <textarea {...register('description')} rows={2} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0] resize-none" />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Preço base (R$)
@@ -509,12 +822,29 @@ export default function ServicesPage() {
                   <input {...register('durationMinutes')} type="number" className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]" />
                   {errors.durationMinutes && <p className="text-red-500 text-xs mt-1">{errors.durationMinutes.message}</p>}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Categoria *</label>
-                  <select {...register('category')} className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0] bg-white">
-                    {CATEGORIES.map((c) => <option key={c} value={c} className="capitalize">{c}</option>)}
-                  </select>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-gray-700">Categorias *</label>
+                  <button type="button" onClick={() => setShowCategories(true)} className="text-xs text-[#C9A4A0] hover:text-[#b8918d] flex items-center gap-1">
+                    <Tag className="w-3 h-3" /> Gerenciar
+                  </button>
                 </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {categories.map((cat) => (
+                    <label key={cat.key} className="flex items-center gap-2 cursor-pointer p-2 rounded-lg border border-gray-200 hover:border-[#C9A4A0] hover:bg-[#C9A4A0]/5 transition-colors has-[:checked]:border-[#C9A4A0] has-[:checked]:bg-[#C9A4A0]/10">
+                      <input
+                        type="checkbox"
+                        value={cat.key}
+                        {...register('categories')}
+                        className="w-4 h-4 accent-[#C9A4A0]"
+                      />
+                      <span className="text-sm text-gray-700">{cat.label}</span>
+                    </label>
+                  ))}
+                </div>
+                {errors.categories && <p className="text-red-500 text-xs mt-1">{errors.categories.message}</p>}
               </div>
 
               <div>

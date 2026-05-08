@@ -14,6 +14,7 @@ import { hasTrinks, hasSupabase } from '../../config/env';
 export interface SyncResult {
   services: { synced: number; errors: number };
   professionals: { synced: number; errors: number };
+  canPost?: { granted: number; checked: number };
   timestamp: string;
 }
 
@@ -105,6 +106,72 @@ export const trinksSync = {
 
     console.log(`[trinks-sync] Professionals: ${synced} synced, ${errors} errors`);
     return { synced, errors };
+  },
+
+  /**
+   * syncCanPost — diário às 03:00 BRT
+   *
+   * Busca todos os clientes no Trinks, cruza pelo telefone com os usuários
+   * cadastrados no app que ainda não têm can_post = true e libera o acesso.
+   */
+  async syncCanPost(): Promise<{ granted: number; checked: number }> {
+    if (!hasTrinks || !hasSupabase) {
+      console.log('[trinks-sync] Skipped can_post sync (Trinks or Supabase not configured)');
+      return { granted: 0, checked: 0 };
+    }
+
+    const { supabase } = await import('../../config/supabase');
+
+    // Busca usuários do app que ainda não têm can_post
+    const { data: appUsers } = await supabase
+      .from('users')
+      .select('id, phone')
+      .eq('can_post', false)
+      .not('phone', 'is', null);
+
+    if (!appUsers?.length) {
+      console.log('[trinks-sync] can_post sync: no pending users');
+      return { granted: 0, checked: 0 };
+    }
+
+    // Busca todos os clientes do Trinks
+    const trinksClients = await trinksService.getClients();
+    if (!trinksClients.length) {
+      console.log('[trinks-sync] can_post sync: no clients returned from Trinks');
+      return { granted: 0, checked: appUsers.length };
+    }
+
+    // Normaliza os telefones do Trinks para comparação
+    const trinksPhones = trinksClients
+      .filter((c) => c.phone)
+      .map((c) => c.phone!.replace(/\D/g, ''));
+
+    let granted = 0;
+
+    for (const user of appUsers) {
+      const userPhone = user.phone!.replace(/\D/g, '');
+      const len = Math.min(userPhone.length, 10);
+
+      const found = trinksPhones.some((tp) => {
+        const cmpLen = Math.min(tp.length, len);
+        return cmpLen >= 8 && userPhone.slice(-cmpLen) === tp.slice(-cmpLen);
+      });
+
+      if (found) {
+        const { error } = await supabase
+          .from('users')
+          .update({ can_post: true })
+          .eq('id', user.id);
+
+        if (!error) {
+          granted++;
+          console.log(`[trinks-sync] can_post granted → user ${user.id} (phone: ${userPhone})`);
+        }
+      }
+    }
+
+    console.log(`[trinks-sync] can_post sync: checked=${appUsers.length}, granted=${granted}`);
+    return { granted, checked: appUsers.length };
   },
 
   async runFullSync(): Promise<SyncResult> {

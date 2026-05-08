@@ -37,8 +37,11 @@ trinksRouter.get('/professionals', async (req: Request, res: Response): Promise<
 
 trinksRouter.post('/sync', adminAuthMiddleware, async (_req: Request, res: Response): Promise<void> => {
   try {
-    const result = await trinksSync.runFullSync();
-    res.json({ data: result, message: 'Sincronização concluída.' });
+    const [fullSync, canPostSync] = await Promise.all([
+      trinksSync.runFullSync(),
+      trinksSync.syncCanPost(),
+    ]);
+    res.json({ data: { ...fullSync, canPost: canPostSync }, message: 'Sincronização concluída.' });
   } catch (err) {
     res.status(500).json({ error: 'SyncError', message: (err as Error).message });
   }
@@ -152,7 +155,36 @@ trinksRouter.post('/webhooks', async (req: Request, res: Response): Promise<void
       .maybeSingle();
 
     if (!appointment) {
-      console.log('[trinks-webhook] Appointment not found in DB for trinks id:', Agendamento.Id);
+      // When Trinks marks a service as Completed for a client not tracked in our DB,
+      // try to match by phone number and grant feed access automatically.
+      if (Action === 'Completed' && Agendamento.Cliente?.Telefone) {
+        const rawPhone = Agendamento.Cliente.Telefone.replace(/\D/g, '');
+
+        const { data: allUsers } = await db
+          .from('users')
+          .select('id, phone, can_post')
+          .not('phone', 'is', null);
+
+        const matched = (allUsers ?? []).find((u: { id: string; phone: string | null; can_post: boolean }) => {
+          if (!u.phone) return false;
+          const normalizedDb = u.phone.replace(/\D/g, '');
+          const len = Math.min(rawPhone.length, normalizedDb.length, 10);
+          return rawPhone.slice(-len) === normalizedDb.slice(-len);
+        });
+
+        if (matched) {
+          if (!matched.can_post) {
+            await db.from('users').update({ can_post: true }).eq('id', matched.id);
+            console.log(`[trinks-webhook] Granted can_post to user ${matched.id} via phone match (Trinks id: ${Agendamento.Id})`);
+          } else {
+            console.log(`[trinks-webhook] User ${matched.id} already has can_post (phone match, Trinks id: ${Agendamento.Id})`);
+          }
+        } else {
+          console.log('[trinks-webhook] No user matched by phone for Trinks id:', Agendamento.Id, '— phone:', rawPhone);
+        }
+      } else {
+        console.log('[trinks-webhook] Appointment not found in DB for trinks id:', Agendamento.Id);
+      }
       return;
     }
 
@@ -161,6 +193,12 @@ trinksRouter.post('/webhooks', async (req: Request, res: Response): Promise<void
       appointment.user_id,
       mappedStatus as any,
     );
+
+    // Also grant can_post when an appointment linked to our DB is completed
+    if (Action === 'Completed' && appointment.user_id) {
+      await db.from('users').update({ can_post: true }).eq('id', appointment.user_id);
+      console.log(`[trinks-webhook] Granted can_post to user ${appointment.user_id} (appointment completed)`);
+    }
 
     console.log(`[trinks-webhook] Appointment ${appointment.id} → ${mappedStatus}`);
   } catch (err) {
