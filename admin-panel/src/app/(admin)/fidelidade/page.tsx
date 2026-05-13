@@ -140,6 +140,11 @@ function SettingsForm({ settings }: { settings: LoyaltySettings }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['loyalty-settings'] }),
   });
 
+  const visitToggleMutation = useMutation({
+    mutationFn: (active: boolean) => loyaltyApi.saveSettings({ visitRewardActive: active }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['loyalty-settings'] }),
+  });
+
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
       {/* Header with toggle */}
@@ -299,10 +304,21 @@ function SettingsForm({ settings }: { settings: LoyaltySettings }) {
               <Gift className="w-4 h-4 text-[#C9A4A0]" />
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Recompensa por número de visitas</p>
             </div>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <span className="text-xs text-gray-500">Ativo</span>
-              <input type="checkbox" {...register('visitRewardActive')} className="w-4 h-4 accent-[#C9A4A0]" />
-            </label>
+            <button
+              type="button"
+              onClick={() => visitToggleMutation.mutate(!settings.visitRewardActive)}
+              disabled={visitToggleMutation.isPending}
+              className={`flex items-center gap-2 h-8 px-4 rounded-lg text-xs font-semibold transition-colors ${
+                settings.visitRewardActive
+                  ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                  : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+              }`}
+            >
+              {visitToggleMutation.isPending
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Power className="w-3.5 h-3.5" />}
+              {settings.visitRewardActive ? 'Ativo' : 'Inativo'}
+            </button>
           </div>
 
           <div className="rounded-xl border-2 border-[#C9A4A0]/20 bg-[#C9A4A0]/5 p-4 space-y-4">
