@@ -512,6 +512,80 @@ export const adminService = {
     return { items: data ?? [], total: count ?? 0, page, limit };
   },
 
+  // ─── Billing / Faturamento ───────────────────────────────────────────────────
+
+  async getBillingStats({ from, to }: { from: string; to: string }) {
+    if (!hasSupabase) {
+      return {
+        totalRevenue: 0, totalAppointments: 0, avgTicket: 0,
+        byService: [], byProfessional: [], byDay: [], appointments: [],
+      };
+    }
+
+    const { data: rows } = await supabase
+      .from('appointments')
+      .select(`
+        id, appointment_date, appointment_time, service_price, status,
+        user:users(name),
+        service:services(name),
+        professional:professionals(name)
+      `)
+      .eq('status', 'concluido')
+      .gte('appointment_date', from)
+      .lte('appointment_date', to)
+      .order('appointment_date', { ascending: false });
+
+    const appts = (rows ?? []) as any[];
+
+    const totalRevenue = appts.reduce((s, a) => s + Number(a.service_price ?? 0), 0);
+    const totalAppointments = appts.length;
+    const avgTicket = totalAppointments > 0 ? totalRevenue / totalAppointments : 0;
+
+    const svcMap = new Map<string, { count: number; revenue: number }>();
+    const proMap = new Map<string, { count: number; revenue: number }>();
+    const dayMap = new Map<string, { count: number; revenue: number }>();
+
+    for (const a of appts) {
+      const svc  = a.service?.name ?? 'Sem serviço';
+      const pro  = a.professional?.name ?? 'Sem profissional';
+      const day  = a.appointment_date as string;
+      const val  = Number(a.service_price ?? 0);
+
+      const s = svcMap.get(svc) ?? { count: 0, revenue: 0 };
+      svcMap.set(svc, { count: s.count + 1, revenue: s.revenue + val });
+
+      const p = proMap.get(pro) ?? { count: 0, revenue: 0 };
+      proMap.set(pro, { count: p.count + 1, revenue: p.revenue + val });
+
+      const d = dayMap.get(day) ?? { count: 0, revenue: 0 };
+      dayMap.set(day, { count: d.count + 1, revenue: d.revenue + val });
+    }
+
+    const byService = [...svcMap.entries()]
+      .map(([name, v]) => ({ name, ...v }))
+      .sort((a, b) => b.revenue - a.revenue);
+
+    const byProfessional = [...proMap.entries()]
+      .map(([name, v]) => ({ name, ...v }))
+      .sort((a, b) => b.revenue - a.revenue);
+
+    const byDay = [...dayMap.entries()]
+      .map(([date, v]) => ({ date, ...v }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    const appointments = appts.map((a) => ({
+      id:               a.id,
+      date:             a.appointment_date,
+      time:             a.appointment_time,
+      clientName:       a.user?.name ?? '—',
+      serviceName:      a.service?.name ?? '—',
+      professionalName: a.professional?.name ?? '—',
+      price:            Number(a.service_price ?? 0),
+    }));
+
+    return { totalRevenue, totalAppointments, avgTicket, byService, byProfessional, byDay, appointments };
+  },
+
   // ─── App Settings ────────────────────────────────────────────────────────────
 
   async getSetting(key: string) {

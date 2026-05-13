@@ -22,6 +22,21 @@ adminRouter.get('/dashboard/stats', async (_req: Request, res: Response): Promis
   }
 });
 
+// ─── Faturamento ──────────────────────────────────────────────────────────────
+
+adminRouter.get('/faturamento', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const monthStart = today.slice(0, 7) + '-01';
+    const from = (req.query.from as string) || monthStart;
+    const to   = (req.query.to   as string) || today;
+    const stats = await adminService.getBillingStats({ from, to });
+    res.json({ data: stats });
+  } catch (err) {
+    res.status(500).json({ error: 'InternalError', message: (err as Error).message });
+  }
+});
+
 // ─── Services ─────────────────────────────────────────────────────────────────
 
 const serviceVariationSchema = z.object({

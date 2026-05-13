@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Palette, Scissors, Users, Calendar, CalendarDays, Tag, Gift,
   Bell, Send, Cake, MessageSquare, Star, CreditCard,
-  UserCog, ClipboardList, Plug, CalendarClock, BadgeDollarSign, TrendingDown, MessageCircle,
+  UserCog, ClipboardList, Plug, CalendarClock, BadgeDollarSign, TrendingDown, MessageCircle, BarChart3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -39,11 +39,12 @@ const navGroups = [
   {
     label: 'Gestão',
     items: [
-      { label: 'Feedbacks',  href: '/feedback',   icon: MessageSquare },
-      { label: 'Avaliações', href: '/reviews',    icon: Star },
-      { label: 'Pagamentos', href: '/payments',   icon: CreditCard },
-      { label: 'Comissões',  href: '/comissoes',  icon: BadgeDollarSign },
-      { label: 'Retenção',   href: '/retencao',   icon: TrendingDown },
+      { label: 'Faturamento', href: '/faturamento', icon: BarChart3 },
+      { label: 'Feedbacks',   href: '/feedback',    icon: MessageSquare },
+      { label: 'Avaliações',  href: '/reviews',     icon: Star },
+      { label: 'Pagamentos',  href: '/payments',    icon: CreditCard },
+      { label: 'Comissões',   href: '/comissoes',   icon: BadgeDollarSign },
+      { label: 'Retenção',    href: '/retencao',    icon: TrendingDown },
     ],
   },
   {

@@ -55,6 +55,13 @@ export const dashboardApi = {
   stats: () => apiClient.get('/admin/dashboard/stats').then((r) => r.data.data),
 };
 
+// ─── Faturamento ──────────────────────────────────────────────────────────────
+
+export const faturamentoApi = {
+  stats: (from: string, to: string) =>
+    apiClient.get('/admin/faturamento', { params: { from, to } }).then((r) => r.data.data),
+};
+
 // ─── Services ────────────────────────────────────────────────────────────────
 
 export const servicesApi = {
