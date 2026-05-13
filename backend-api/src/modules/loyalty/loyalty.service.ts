@@ -16,6 +16,12 @@ export interface LoyaltySettings {
   silverDiscount: number;
   goldDiscount: number;
   couponValidityDays: number;
+  // Visit-based reward
+  visitRewardActive: boolean;
+  visitRewardCount: number;
+  visitRewardDiscountType: 'percentage' | 'fixed';
+  visitRewardDiscountValue: number;
+  visitRewardValidityDays: number;
 }
 
 export type LoyaltyTier = 'bronze' | 'prata' | 'ouro';
@@ -30,6 +36,11 @@ const defaultSettings: LoyaltySettings = {
   silverDiscount: 10,
   goldDiscount: 15,
   couponValidityDays: 30,
+  visitRewardActive: false,
+  visitRewardCount: 10,
+  visitRewardDiscountType: 'percentage',
+  visitRewardDiscountValue: 100,
+  visitRewardValidityDays: 30,
 };
 
 function getTier(lifetimePoints: number, s: LoyaltySettings): LoyaltyTier {
@@ -40,15 +51,20 @@ function getTier(lifetimePoints: number, s: LoyaltySettings): LoyaltyTier {
 
 function mapSettings(d: any): LoyaltySettings {
   return {
-    isActive:            d.is_active,
-    pointsPerReal:       Number(d.points_per_real),
-    silverThreshold:     d.silver_threshold,
-    goldThreshold:       d.gold_threshold,
-    redemptionThreshold: d.redemption_threshold,
-    bronzeDiscount:      Number(d.bronze_discount),
-    silverDiscount:      Number(d.silver_discount),
-    goldDiscount:        Number(d.gold_discount),
-    couponValidityDays:  d.coupon_validity_days,
+    isActive:                d.is_active,
+    pointsPerReal:           Number(d.points_per_real),
+    silverThreshold:         d.silver_threshold,
+    goldThreshold:           d.gold_threshold,
+    redemptionThreshold:     d.redemption_threshold,
+    bronzeDiscount:          Number(d.bronze_discount),
+    silverDiscount:          Number(d.silver_discount),
+    goldDiscount:            Number(d.gold_discount),
+    couponValidityDays:      d.coupon_validity_days,
+    visitRewardActive:       d.visit_reward_active ?? false,
+    visitRewardCount:        d.visit_reward_count ?? 10,
+    visitRewardDiscountType: d.visit_reward_discount_type ?? 'percentage',
+    visitRewardDiscountValue: Number(d.visit_reward_discount_value ?? 100),
+    visitRewardValidityDays: d.visit_reward_validity_days ?? 30,
   };
 }
 
@@ -64,15 +80,20 @@ export const loyaltyService = {
     const { data: existing } = await supabase.from('loyalty_settings').select('id').limit(1).maybeSingle();
 
     const updates: Record<string, any> = { updated_at: new Date().toISOString() };
-    if (input.isActive            !== undefined) updates.is_active            = input.isActive;
-    if (input.pointsPerReal       !== undefined) updates.points_per_real      = input.pointsPerReal;
-    if (input.silverThreshold     !== undefined) updates.silver_threshold     = input.silverThreshold;
-    if (input.goldThreshold       !== undefined) updates.gold_threshold       = input.goldThreshold;
-    if (input.redemptionThreshold !== undefined) updates.redemption_threshold = input.redemptionThreshold;
-    if (input.bronzeDiscount      !== undefined) updates.bronze_discount      = input.bronzeDiscount;
-    if (input.silverDiscount      !== undefined) updates.silver_discount      = input.silverDiscount;
-    if (input.goldDiscount        !== undefined) updates.gold_discount        = input.goldDiscount;
-    if (input.couponValidityDays  !== undefined) updates.coupon_validity_days = input.couponValidityDays;
+    if (input.isActive                !== undefined) updates.is_active                 = input.isActive;
+    if (input.pointsPerReal           !== undefined) updates.points_per_real           = input.pointsPerReal;
+    if (input.silverThreshold         !== undefined) updates.silver_threshold          = input.silverThreshold;
+    if (input.goldThreshold           !== undefined) updates.gold_threshold            = input.goldThreshold;
+    if (input.redemptionThreshold     !== undefined) updates.redemption_threshold      = input.redemptionThreshold;
+    if (input.bronzeDiscount          !== undefined) updates.bronze_discount           = input.bronzeDiscount;
+    if (input.silverDiscount          !== undefined) updates.silver_discount           = input.silverDiscount;
+    if (input.goldDiscount            !== undefined) updates.gold_discount             = input.goldDiscount;
+    if (input.couponValidityDays      !== undefined) updates.coupon_validity_days      = input.couponValidityDays;
+    if (input.visitRewardActive       !== undefined) updates.visit_reward_active       = input.visitRewardActive;
+    if (input.visitRewardCount        !== undefined) updates.visit_reward_count        = input.visitRewardCount;
+    if (input.visitRewardDiscountType !== undefined) updates.visit_reward_discount_type  = input.visitRewardDiscountType;
+    if (input.visitRewardDiscountValue !== undefined) updates.visit_reward_discount_value = input.visitRewardDiscountValue;
+    if (input.visitRewardValidityDays !== undefined) updates.visit_reward_validity_days  = input.visitRewardValidityDays;
 
     if (existing?.id) {
       await supabase.from('loyalty_settings').update(updates).eq('id', existing.id);
@@ -114,10 +135,17 @@ export const loyaltyService = {
       description:    `Atendimento concluído — +${pointsEarned} pts`,
     });
 
-    // Check auto-redemption
+    // Check points auto-redemption
     if (newBalance >= settings.redemptionThreshold) {
       await this._autoRedeem(userId, newBalance, settings).catch((e) =>
         console.error('[loyalty] auto-redeem error:', e)
+      );
+    }
+
+    // Check visit-based reward
+    if (settings.visitRewardActive) {
+      await this._checkVisitReward(userId, appointmentId, settings).catch((e) =>
+        console.error('[loyalty] visit-reward error:', e)
       );
     }
   },
@@ -189,6 +217,82 @@ export const loyaltyService = {
     ).catch(() => {});
 
     console.log(`[loyalty] Auto-redeem: user=${userId} tier=${tier} coupon=${code}`);
+  },
+
+  // ─── Visit-based reward ───────────────────────────────────────────────────
+  async _checkVisitReward(userId: string, appointmentId: string, settings: LoyaltySettings): Promise<void> {
+    // Count total concluido appointments for this user
+    const { count: totalVisits } = await supabase
+      .from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('status', 'concluido');
+
+    if (!totalVisits || totalVisits < settings.visitRewardCount) return;
+
+    const rewardCycle = Math.floor(totalVisits / settings.visitRewardCount);
+
+    // Check if this cycle's reward was already given
+    const { data: existing } = await supabase
+      .from('loyalty_visit_log')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('reward_cycle', rewardCycle)
+      .maybeSingle();
+    if (existing) return;
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('name')
+      .eq('id', userId)
+      .maybeSingle();
+    if (!user) return;
+
+    const firstName = (user.name as string)?.split(' ')[0] ?? 'Cliente';
+    const isPercentage = settings.visitRewardDiscountType === 'percentage';
+    const isFullDiscount = isPercentage && settings.visitRewardDiscountValue >= 100;
+
+    const code = `VISITA${rewardCycle}${userId.slice(0, 5).toUpperCase()}${Date.now().toString(36).slice(-3).toUpperCase()}`;
+    const validUntil = new Date();
+    validUntil.setDate(validUntil.getDate() + settings.visitRewardValidityDays);
+
+    const title = isFullDiscount
+      ? `Serviço Grátis — ${firstName} 🎁`
+      : `Recompensa por Visitas — ${firstName}`;
+
+    const description = isFullDiscount
+      ? `Parabéns! Você completou ${rewardCycle * settings.visitRewardCount} atendimentos e ganhou um serviço grátis.`
+      : `Recompensa por fidelidade — ${rewardCycle * settings.visitRewardCount} atendimentos concluídos.`;
+
+    const { data: coupon, error } = await supabase.from('coupons').insert({
+      code,
+      title,
+      description,
+      discount_type:  settings.visitRewardDiscountType,
+      discount_value: settings.visitRewardDiscountValue,
+      max_usages:     1,
+      valid_from:     new Date().toISOString().slice(0, 10),
+      valid_until:    validUntil.toISOString().slice(0, 10),
+      status:         'ativo',
+      rules:          ['Válido para um agendamento', `Exclusivo para ${firstName}`, 'Intransferível'],
+    }).select('id').single();
+
+    if (error) { console.error('[loyalty] visit-reward coupon error:', error); return; }
+
+    await supabase.from('loyalty_visit_log').insert({
+      user_id:               userId,
+      reward_cycle:          rewardCycle,
+      coupon_code:           code,
+      total_visits_at_reward: totalVisits,
+    });
+
+    const pushMsg = isFullDiscount
+      ? `Incrível! Você ganhou um serviço grátis após ${rewardCycle * settings.visitRewardCount} visitas! 🎁`
+      : `Parabéns! Você ganhou um cupom de ${settings.visitRewardDiscountValue}${isPercentage ? '%' : ' reais'} após ${rewardCycle * settings.visitRewardCount} visitas! 🎉`;
+
+    await pushService.newCoupon(userId, pushMsg, code).catch(() => {});
+
+    console.log(`[loyalty] Visit reward: user=${userId} cycle=${rewardCycle} visits=${totalVisits} coupon=${code}`);
   },
 
   // ─── Ranking for admin ────────────────────────────────────────────────────

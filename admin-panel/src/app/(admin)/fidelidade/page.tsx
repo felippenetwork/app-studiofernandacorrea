@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import {
   Award, Star, Zap, Settings, Users, Loader2, Save,
-  CheckCircle, Power, ChevronDown, ChevronUp, History,
+  CheckCircle, Power, ChevronDown, ChevronUp, History, Gift,
 } from 'lucide-react';
 import { loyaltyApi } from '@/lib/api';
 import { getErrorMessage } from '@/lib/utils';
@@ -21,6 +21,11 @@ interface LoyaltySettings {
   silverDiscount: number;
   goldDiscount: number;
   couponValidityDays: number;
+  visitRewardActive: boolean;
+  visitRewardCount: number;
+  visitRewardDiscountType: 'percentage' | 'fixed';
+  visitRewardDiscountValue: number;
+  visitRewardValidityDays: number;
 }
 
 interface CustomerRow {
@@ -284,6 +289,72 @@ function SettingsForm({ settings }: { settings: LoyaltySettings }) {
               {...register('couponValidityDays', { valueAsNumber: true })}
               className="w-44 h-9 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]"
             />
+          </div>
+        </div>
+
+        {/* Recompensa por visitas */}
+        <div className="space-y-3 border-t border-gray-100 pt-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Gift className="w-4 h-4 text-[#C9A4A0]" />
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Recompensa por número de visitas</p>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <span className="text-xs text-gray-500">Ativo</span>
+              <input type="checkbox" {...register('visitRewardActive')} className="w-4 h-4 accent-[#C9A4A0]" />
+            </label>
+          </div>
+
+          <div className="rounded-xl border-2 border-[#C9A4A0]/20 bg-[#C9A4A0]/5 p-4 space-y-4">
+            <p className="text-xs text-gray-500">
+              A cada <strong>N atendimentos concluídos</strong> o cliente recebe automaticamente um cupom — pode ser um serviço totalmente grátis (100%) ou um desconto fixo/percentual.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Número de atendimentos</label>
+                <input
+                  type="number"
+                  min="1"
+                  {...register('visitRewardCount', { valueAsNumber: true })}
+                  className="w-full h-9 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]"
+                />
+                <p className="text-xs text-gray-400 mt-1">Ex: 10 → a cada 10 visitas ganha recompensa</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Validade do cupom (dias)</label>
+                <input
+                  type="number"
+                  min="1"
+                  {...register('visitRewardValidityDays', { valueAsNumber: true })}
+                  className="w-full h-9 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de desconto</label>
+                <select
+                  {...register('visitRewardDiscountType')}
+                  className="w-full h-9 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0] bg-white"
+                >
+                  <option value="percentage">Percentual (%)</option>
+                  <option value="fixed">Valor fixo (R$)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Valor do desconto</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  {...register('visitRewardDiscountValue', { valueAsNumber: true })}
+                  className="w-full h-9 px-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#C9A4A0]"
+                />
+                <p className="text-xs text-gray-400 mt-1">100% = serviço totalmente grátis</p>
+              </div>
+            </div>
           </div>
         </div>
 
