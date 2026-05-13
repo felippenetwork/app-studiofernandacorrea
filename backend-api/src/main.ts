@@ -23,6 +23,7 @@ import { birthdayRouter } from './modules/birthday/birthday.router';
 import { schedulesRouter } from './modules/schedules/schedules.router';
 import { commissionsRouter } from './modules/commissions/commissions.router';
 import { whatsappRouter }   from './modules/whatsapp/whatsapp.router';
+import { loyaltyRouter }    from './modules/loyalty/loyalty.router';
 import { startCronJobs } from './scheduler';
 import { adminService } from './modules/admin/admin.service';
 import { getConfig } from './modules/whatsapp/whatsapp.service';
@@ -206,6 +207,7 @@ app.use('/api/admin/birthday',      birthdayRouter);
 app.use('/api/admin/schedules',     schedulesRouter);
 app.use('/api/admin/commissions',   commissionsRouter);
 app.use('/api/admin/whatsapp',      whatsappRouter);
+app.use('/api/admin/loyalty',       loyaltyRouter);
 app.use('/api/admin',               adminRouter);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────

@@ -62,6 +62,15 @@ export const faturamentoApi = {
     apiClient.get('/admin/faturamento', { params: { from, to } }).then((r) => r.data.data),
 };
 
+// ─── Fidelidade ───────────────────────────────────────────────────────────────
+
+export const loyaltyApi = {
+  getSettings:  ()            => apiClient.get('/admin/loyalty/settings').then((r) => r.data.data),
+  saveSettings: (data: any)   => apiClient.put('/admin/loyalty/settings', data).then((r) => r.data.data),
+  getCustomers: ()            => apiClient.get('/admin/loyalty/customers').then((r) => r.data.data),
+  getHistory:   (userId: string) => apiClient.get(`/admin/loyalty/customers/${userId}/history`).then((r) => r.data.data),
+};
+
 // ─── Services ────────────────────────────────────────────────────────────────
 
 export const servicesApi = {

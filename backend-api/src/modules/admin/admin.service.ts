@@ -2,6 +2,7 @@ import { hasSupabase } from '../../config/env';
 import { supabase } from '../../config/supabase';
 import { MOCK_APPOINTMENTS } from '../appointments/appointments.mock';
 import { sendAppointmentConfirmation } from '../whatsapp/whatsapp.service';
+import { loyaltyService } from '../loyalty/loyalty.service';
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
 
@@ -488,6 +489,13 @@ export const adminService = {
       .select('*, user:users(name,email), service:services(name), professional:professionals(name)')
       .single();
     if (error || !data) throw new Error('Agendamento não encontrado ou erro ao atualizar.');
+
+    if (status === 'concluido' && data.user_id && data.service_price) {
+      loyaltyService.awardPoints(data.user_id, id, Number(data.service_price)).catch((e) =>
+        console.error('[loyalty] awardPoints error:', e)
+      );
+    }
+
     return data;
   },
 
