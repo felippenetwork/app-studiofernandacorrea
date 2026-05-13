@@ -1,5 +1,15 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 
+export interface RetentionClient {
+  userId: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  lastVisit: string;
+  daysAway: number;
+  totalVisits: number;
+}
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000/api';
 
 export const apiClient: AxiosInstance = axios.create({
@@ -56,26 +66,6 @@ export const servicesApi = {
     apiClient.patch('/admin/services/reorder', { items }).then((r) => r.data),
 };
 
-// ─── Service Categories ───────────────────────────────────────────────────────
-
-export const serviceCategoriesApi = {
-  list: () => apiClient.get('/admin/service-categories').then((r) => r.data.data as { key: string; label: string }[]),
-  upsert: (cat: { key: string; label: string }) =>
-    apiClient.put(`/admin/service-categories/${cat.key}`, cat).then((r) => r.data.data as { key: string; label: string }[]),
-  remove: (key: string) =>
-    apiClient.delete(`/admin/service-categories/${key}`).then((r) => r.data.data as { key: string; label: string }[]),
-  reorder: (cats: { key: string; label: string }[]) =>
-    apiClient.put('/admin/service-categories', { categories: cats }).then((r) => r.data.data as { key: string; label: string }[]),
-};
-
-// ─── Professional Specialties ─────────────────────────────────────────────────
-
-export const professionalSpecialtiesApi = {
-  list: () => apiClient.get('/admin/professional-specialties').then((r) => r.data.data as string[]),
-  save: (specialties: string[]) =>
-    apiClient.put('/admin/professional-specialties', { specialties }).then((r) => r.data.data as string[]),
-};
-
 // ─── Professionals ────────────────────────────────────────────────────────────
 
 export const professionalsApi = {
@@ -93,6 +83,8 @@ export const customersApi = {
   get: (id: string) => apiClient.get(`/admin/customers/${id}`).then((r) => r.data.data),
   create: (data: any) => apiClient.post('/admin/customers', data).then((r) => r.data.data),
   update: (id: string, data: any) => apiClient.put(`/admin/customers/${id}`, data).then((r) => r.data.data),
+  retention: (minDays?: number) =>
+    apiClient.get('/admin/customers/retention', { params: { minDays } }).then((r) => r.data.data as RetentionClient[]),
 };
 
 // ─── Coupons ──────────────────────────────────────────────────────────────────
@@ -144,8 +136,6 @@ export const birthdayApi = {
   getSettings: () => apiClient.get('/admin/birthday/settings').then((r) => r.data.data),
   updateSettings: (data: any) => apiClient.put('/admin/birthday/settings', data).then((r) => r.data.data),
   runNow: () => apiClient.post('/admin/birthday/run-now').then((r) => r.data),
-  calendar: (month: number) =>
-    apiClient.get('/admin/birthday/calendar', { params: { month } }).then((r) => r.data.data as Record<number, string[]>),
 };
 
 // ─── Push Campaigns ───────────────────────────────────────────────────────────
@@ -154,7 +144,6 @@ export const pushCampaignsApi = {
   list: () => apiClient.get('/admin/push-campaigns').then((r) => r.data.data),
   create: (data: any) => apiClient.post('/admin/push-campaigns', data).then((r) => r.data.data),
   send: (id: string) => apiClient.post(`/admin/push-campaigns/${id}/send`).then((r) => r.data),
-  toggle: (id: string) => apiClient.patch(`/admin/push-campaigns/${id}/toggle`).then((r) => r.data),
 };
 
 // ─── Feedback ─────────────────────────────────────────────────────────────────
@@ -193,3 +182,73 @@ export const auditLogsApi = {
   list: (params?: { page?: number; limit?: number }) =>
     apiClient.get('/admin/audit-logs', { params }).then((r) => r.data.data),
 };
+
+// ─── Appointments (status update) ─────────────────────────────────────────────
+
+export const appointmentStatusApi = {
+  updateStatus: (id: string, status: string, notes?: string) =>
+    apiClient.patch(`/admin/appointments/${id}/status`, { status, notes }).then((r) => r.data.data),
+};
+
+// ─── Schedules ────────────────────────────────────────────────────────────────
+
+export const schedulesApi = {
+  getAll: () => apiClient.get('/admin/schedules').then((r) => r.data.data),
+  getByProfessional: (professionalId: string) =>
+    apiClient.get(`/admin/schedules/${professionalId}`).then((r) => r.data.data),
+  setDay: (professionalId: string, dayOfWeek: number, data: { startTime: string; endTime: string; isActive: boolean }) =>
+    apiClient.put(`/admin/schedules/${professionalId}/day/${dayOfWeek}`, data).then((r) => r.data.data),
+  getBlocks: (professionalId: string, params?: { from?: string; to?: string }) =>
+    apiClient.get(`/admin/schedules/${professionalId}/blocks`, { params }).then((r) => r.data.data),
+  createBlock: (professionalId: string, data: { blockDate: string; startTime?: string; endTime?: string; reason?: string }) =>
+    apiClient.post(`/admin/schedules/${professionalId}/blocks`, data).then((r) => r.data.data),
+  deleteBlock: (blockId: string) =>
+    apiClient.delete(`/admin/schedules/blocks/${blockId}`).then((r) => r.data),
+  getSlots: (professionalId: string, serviceId: string, date: string) =>
+    apiClient.get(`/admin/schedules/${professionalId}/slots`, { params: { serviceId, date } }).then((r) => r.data.data),
+};
+
+// ─── Commissions ──────────────────────────────────────────────────────────────
+
+export const commissionsApi = {
+  getRates: (professionalId?: string) =>
+    apiClient.get('/admin/commissions/rates', { params: { professionalId } }).then((r) => r.data.data),
+  setRate: (data: { professionalId: string; serviceId: string; percentage: number }) =>
+    apiClient.put('/admin/commissions/rates', data).then((r) => r.data.data),
+  deleteRate: (data: { professionalId: string; serviceId: string }) =>
+    apiClient.delete('/admin/commissions/rates', { data }).then((r) => r.data),
+  getSummary: (params?: { from?: string; to?: string }) =>
+    apiClient.get('/admin/commissions/summary', { params }).then((r) => r.data.data),
+  getRecords: (params?: { professionalId?: string; status?: string; from?: string; to?: string; page?: number; limit?: number }) =>
+    apiClient.get('/admin/commissions/records', { params }).then((r) => r.data.data),
+  pay: (ids: string[], notes?: string) =>
+    apiClient.post('/admin/commissions/records/pay', { ids, notes }).then((r) => r.data),
+};
+
+// ─── WhatsApp ─────────────────────────────────────────────────────────────────
+export const whatsappApi = {
+  getConfig:    () => apiClient.get('/admin/whatsapp/config').then((r) => r.data.data as WppConfig | null),
+  saveConfig:   (d: { provider: string; apiUrl?: string; apiKey?: string; instanceName?: string }) =>
+    apiClient.post('/admin/whatsapp/config', d).then((r) => r.data),
+  setActive:    (active: boolean) => apiClient.patch('/admin/whatsapp/config/active', { active }).then((r) => r.data),
+  getStatus:    () => apiClient.get('/admin/whatsapp/status').then((r) => r.data.data as { connected: boolean; qrcode?: string; state?: string }),
+  connect:      () => apiClient.post('/admin/whatsapp/connect').then((r) => r.data),
+  disconnect:   () => apiClient.post('/admin/whatsapp/disconnect').then((r) => r.data),
+  getTemplates: () => apiClient.get('/admin/whatsapp/templates').then((r) => r.data.data as WppTemplate[]),
+  updateTemplate: (id: string, d: { message?: string; isActive?: boolean }) =>
+    apiClient.patch(`/admin/whatsapp/templates/${id}`, d).then((r) => r.data),
+  send:  (d: { phone: string; message: string; recipientName?: string; recipientId?: string; trigger?: string }) =>
+    apiClient.post('/admin/whatsapp/send', d).then((r) => r.data),
+  getLog: (limit?: number) => apiClient.get('/admin/whatsapp/log', { params: { limit } }).then((r) => r.data.data as WppLog[]),
+};
+
+export interface WppConfig {
+  id?: string; provider: string; apiUrl: string; apiKey: string; instanceName: string; isActive: boolean;
+}
+export interface WppTemplate {
+  id: string; trigger: string; name: string; message: string; isActive: boolean; delayDays: number;
+}
+export interface WppLog {
+  id: string; trigger?: string; recipientName?: string; phone: string;
+  message: string; status: string; error?: string; sentAt: string;
+}

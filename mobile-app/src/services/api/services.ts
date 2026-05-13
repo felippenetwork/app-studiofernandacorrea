@@ -3,16 +3,14 @@ import { Service, Professional } from '../../types';
 import { MOCK_SERVICES, MOCK_PROFESSIONALS, MOCK_TIME_SLOTS } from '../../mocks/data';
 
 function mapService(s: any): Service {
-  const rawCat: string = s.category ?? 'outros';
-  const cats = rawCat.split(',').map((c: string) => c.trim()).filter(Boolean);
   return {
     id: s.id,
     name: s.name,
     description: s.description ?? '',
     price: s.price,
+    // Admin endpoint uses camelCase, Trinks uses snake_case/duration
     durationMinutes: s.durationMinutes ?? s.duration_minutes ?? s.duration ?? 60,
-    category: (cats[0] ?? 'outros') as any,
-    categories: cats as any[],
+    category: s.category ?? 'outros',
     imageUrl: s.imageUrl ?? s.image_url ?? undefined,
     isActive: s.isActive ?? s.is_active ?? s.active ?? true,
     bookingFeeType: s.bookingFeeType ?? s.booking_fee_type ?? 'fixed',
@@ -35,18 +33,6 @@ function mapProfessional(p: any): Professional {
 }
 
 export const servicesService = {
-  async getServiceCategories(): Promise<{ key: string; label: string }[]> {
-    if (USE_MOCK) return [
-      { key: 'cilios', label: 'Cílios' },
-      { key: 'sobrancelha', label: 'Sobrancelha' },
-      { key: 'cabelo', label: 'Cabelo' },
-      { key: 'unhas', label: 'Unhas' },
-      { key: 'maquiagem', label: 'Maquiagem' },
-    ];
-    const { data } = await apiClient.get('/service-categories');
-    return data.data ?? [];
-  },
-
   async getServices(): Promise<Service[]> {
     if (USE_MOCK) {
       await new Promise((r) => setTimeout(r, 500));

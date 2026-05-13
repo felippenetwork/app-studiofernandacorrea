@@ -148,28 +148,6 @@ export function ProfileScreen() {
         <Text style={styles.name}>{user?.name}</Text>
         <Text style={styles.email}>{user?.email}</Text>
         {user?.phone && <Text style={styles.phone}>{user.phone}</Text>}
-
-        {user?.birthDate ? (
-          <View style={styles.birthdayRow}>
-            <Ionicons name="gift-outline" size={13} color={colors.primary} />
-            <Text style={styles.birthdayText}>
-              {(() => {
-                const [y, m, d] = (user.birthDate as string).split('-');
-                return `${d}/${m}/${y}`;
-              })()}
-            </Text>
-          </View>
-        ) : (
-          <TouchableOpacity
-            onPress={() => navigation.navigate('EditProfile')}
-            style={styles.birthdayPrompt}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="gift-outline" size={13} color={colors.primary} />
-            <Text style={styles.birthdayPromptText}>Adicionar data de nascimento</Text>
-          </TouchableOpacity>
-        )}
-
         <TouchableOpacity
           onPress={() => navigation.navigate('EditProfile')}
           style={styles.editBtn}
@@ -274,32 +252,6 @@ const styles = StyleSheet.create({
     ...textStyles.bodySmall,
     color: colors.textTertiary,
     marginTop: 2,
-  },
-  birthdayRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-  },
-  birthdayText: {
-    ...textStyles.bodySmall,
-    color: colors.textTertiary,
-  },
-  birthdayPrompt: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: colors.primaryLight,
-    borderRadius: 20,
-    borderStyle: 'dashed',
-  },
-  birthdayPromptText: {
-    ...textStyles.caption,
-    color: colors.primary,
   },
   statsCard: {
     flexDirection: 'row',

@@ -4,7 +4,7 @@ import { validate } from '../../middleware/validate.middleware';
 import { appointmentsService } from './appointments.service';
 import { AuthenticatedRequest } from '../../types';
 import { createAppointmentSchema } from './appointments.validator';
-import { trinksService } from '../trinks/trinks.service';
+import { schedulesService } from '../schedules/schedules.service';
 
 export const appointmentsRouter = Router();
 
@@ -21,27 +21,27 @@ appointmentsRouter.get('/', async (req: Request, res: Response): Promise<void> =
   }
 });
 
-// GET /api/appointments/available-slots — get available time slots from Trinks
+// GET /api/appointments/available-slots — slots pelo sistema próprio de agenda
 appointmentsRouter.get('/available-slots', async (req: Request, res: Response): Promise<void> => {
   try {
     const { professionalId, serviceId, date } = req.query as Record<string, string>;
-    if (!professionalId || !date) {
-      res.status(400).json({ error: 'ValidationError', message: 'professionalId e date são obrigatórios.' });
+    if (!professionalId || !serviceId || !date) {
+      res.status(400).json({ error: 'ValidationError', message: 'professionalId, serviceId e date são obrigatórios.' });
       return;
     }
-    let slots;
-    try {
-      slots = await trinksService.getAvailableSlots(professionalId, serviceId, date);
-    } catch {
-      // Trinks unavailable — return mock slots so mobile booking flow works
-      slots = [
-        { time: '09:00', available: true },  { time: '09:30', available: false },
-        { time: '10:00', available: true },  { time: '10:30', available: true },
-        { time: '11:00', available: false }, { time: '11:30', available: true },
-        { time: '14:00', available: true },  { time: '14:30', available: true },
-        { time: '15:00', available: false }, { time: '15:30', available: true },
-        { time: '16:00', available: true },  { time: '17:00', available: true },
-      ];
+    const slots = await schedulesService.getAvailableSlots(professionalId, serviceId, date);
+    // Nenhum horário cadastrado ainda — retorna mock para não travar o fluxo de booking em dev
+    if (!slots.length) {
+      res.json({
+        data: [
+          { time: '09:00', available: true }, { time: '09:30', available: true },
+          { time: '10:00', available: true }, { time: '10:30', available: true },
+          { time: '11:00', available: true }, { time: '14:00', available: true },
+          { time: '14:30', available: true }, { time: '15:00', available: true },
+          { time: '16:00', available: true }, { time: '17:00', available: true },
+        ],
+      });
+      return;
     }
     res.json({ data: slots });
   } catch (err) {

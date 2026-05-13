@@ -20,8 +20,13 @@ import { adminAuthRouter } from './modules/admin-auth/admin-auth.router';
 import { adminRouter } from './modules/admin/admin.router';
 import { adminNotificationsRouter } from './modules/admin-notifications/admin-notifications.router';
 import { birthdayRouter } from './modules/birthday/birthday.router';
+import { schedulesRouter } from './modules/schedules/schedules.router';
+import { commissionsRouter } from './modules/commissions/commissions.router';
+import { whatsappRouter }   from './modules/whatsapp/whatsapp.router';
 import { startCronJobs } from './scheduler';
 import { adminService } from './modules/admin/admin.service';
+import { getConfig } from './modules/whatsapp/whatsapp.service';
+import { connectBaileys } from './modules/whatsapp/baileys.manager';
 import { runMigrations } from './scripts/migrate';
 
 const app = express();
@@ -179,16 +184,6 @@ app.get('/api/services', async (_req, res) => {
   }
 });
 
-// ─── Public service categories (no auth) ─────────────────────────────────────
-app.get('/api/service-categories', async (_req, res) => {
-  try {
-    const categories = await adminService.listServiceCategories();
-    res.json({ data: categories });
-  } catch {
-    res.json({ data: [] });
-  }
-});
-
 // ─── Public config (no auth) ──────────────────────────────────────────────────
 // Returns only safe, non-sensitive public settings for the mobile app
 app.get('/api/config/public', async (_req, res) => {
@@ -208,6 +203,9 @@ app.get('/api/config/public', async (_req, res) => {
 app.use('/api/admin/auth',          adminAuthRouter);
 app.use('/api/admin/notifications', adminNotificationsRouter);
 app.use('/api/admin/birthday',      birthdayRouter);
+app.use('/api/admin/schedules',     schedulesRouter);
+app.use('/api/admin/commissions',   commissionsRouter);
+app.use('/api/admin/whatsapp',      whatsappRouter);
 app.use('/api/admin',               adminRouter);
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
@@ -243,6 +241,19 @@ if (env.NODE_ENV !== 'test') {
     console.log(`   Trinks      : ${hasTrinks ? '✓ connected' : '✗ mock mode'}`);
     console.log(`   Mercado Pago: ${hasMercadoPago ? '✓ connected' : '✗ simulation'}`);
     startCronJobs();
+
+    // Auto-reconecta Baileys se já havia sessão salva
+    getConfig().then((cfg) => {
+      if (cfg?.provider === 'baileys' && hasSupabase) {
+        console.log('   WhatsApp    : 🔄 reconectando Baileys...');
+        connectBaileys().then(() => {
+          console.log('   WhatsApp    : ✓ Baileys reconectado');
+        }).catch((err) => {
+          console.warn('   WhatsApp    : ✗ Baileys reconexão falhou —', err.message);
+        });
+      }
+    }).catch(() => {});
+
     if (isDev) console.log(`   Docs        : http://localhost:${env.PORT}/health\n`);
   });
 

@@ -23,18 +23,12 @@ const envSchema = z.object({
   TRINKS_COMPANY_ID: z.string().optional(),
   TRINKS_WEBHOOK_SECRET: z.string().optional(),
 
-  // Mercado Pago (mantido para referência, não usado)
+  // Mercado Pago
   MP_ACCESS_TOKEN: z.string().optional(),
   MP_PUBLIC_KEY: z.string().optional(),
   MP_WEBHOOK_SECRET: z.string().optional(),
 
-  // Getnet
-  GETNET_CLIENT_ID: z.string().optional(),
-  GETNET_CLIENT_SECRET: z.string().optional(),
-  GETNET_SELLER_ID: z.string().optional(),
-  GETNET_ENV: z.enum(['sandbox', 'production']).default('sandbox'),
-
-  // Backend public URL (used in email links and webhook notification_url)
+  // Backend public URL (used in email links and MP webhook notification_url)
   API_BASE_URL: z.string().url().optional(),
 
   // Email / SMTP
@@ -46,6 +40,9 @@ const envSchema = z.object({
 
   // CORS
   ALLOWED_ORIGINS: z.string().default('http://localhost:19000,exp://localhost:19000'),
+
+  // Feature flags
+  ENABLE_TRINKS_SYNC: z.enum(['true', 'false']).default('false'),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -77,10 +74,6 @@ export const env = parsed.success
       MP_ACCESS_TOKEN: undefined,
       MP_PUBLIC_KEY: undefined,
       MP_WEBHOOK_SECRET: undefined,
-      GETNET_CLIENT_ID: undefined,
-      GETNET_CLIENT_SECRET: undefined,
-      GETNET_SELLER_ID: undefined,
-      GETNET_ENV: 'sandbox' as const,
       API_BASE_URL: undefined,
       SMTP_HOST: undefined,
       SMTP_PORT: undefined,
@@ -88,6 +81,7 @@ export const env = parsed.success
       SMTP_PASS: undefined,
       SMTP_FROM: undefined,
       ALLOWED_ORIGINS: 'http://localhost:19000,exp://localhost:19000',
+      ENABLE_TRINKS_SYNC: 'false' as const,
     };
 
 export const isDev = env.NODE_ENV === 'development';
@@ -95,5 +89,5 @@ export const isProd = env.NODE_ENV === 'production';
 export const hasTrinks = !!(env.TRINKS_API_URL && env.TRINKS_API_KEY);
 export const hasSupabase = !!(env.SUPABASE_URL && env.SUPABASE_SERVICE_KEY);
 export const hasMercadoPago = !!env.MP_ACCESS_TOKEN;
-export const hasGetnet = !!(env.GETNET_CLIENT_ID && env.GETNET_CLIENT_SECRET && env.GETNET_SELLER_ID);
-export const adminJwtSecret = env.ADMIN_JWT_SECRET ?? env.JWT_SECRET;
+export const adminJwtSecret    = env.ADMIN_JWT_SECRET ?? env.JWT_SECRET;
+export const enableTrinksSync  = env.ENABLE_TRINKS_SYNC === 'true';

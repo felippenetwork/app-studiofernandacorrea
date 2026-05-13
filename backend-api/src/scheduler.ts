@@ -2,53 +2,40 @@
  * Cron Scheduler — Studio Fernanda Correa API
  *
  * Schedules:
- *   - Birthday automation: hourly check — fires when current BRT hour matches
- *     the sendHour saved in birthday_settings (configurable via admin panel).
+ *   - Birthday automation: daily at 08:00 BRT (America/Sao_Paulo)
  *
  * Timezone: All crons run in America/Sao_Paulo (UTC-3).
+ * In production, ensure the server timezone or the cron timezone arg is correct.
+ *
+ * To disable a job without removing code, set the corresponding env var or
+ * admin setting to inactive.
  */
 
 import cron from 'node-cron';
 import { birthdayService } from './modules/birthday/birthday.service';
-import { adminService } from './modules/admin/admin.service';
 import { trinksSync } from './modules/trinks/trinks.sync';
 import { pushService } from './services/push.service';
+import { runLembrete24h, runPosAtendimento, runRetencaoWhatsApp } from './modules/whatsapp/whatsapp.service';
 import { supabase } from './config/supabase';
 import { hasSupabase } from './config/env';
 
 export function startCronJobs(): void {
-  // ─── Birthday automation — hourly check, hour read from DB settings ──────────
-  // Fires every hour on the minute :00. Inside, reads sendHour from
-  // birthday_settings and only runs if the current BRT hour matches.
-  // This means any change to sendHour in the admin panel takes effect
-  // automatically — no server restart needed.
+  // ─── Birthday automation — daily at 08:00 BRT ──────────────────────────────
+  // Cron expression: "0 8 * * *"  →  every day at 08:00
   cron.schedule(
-    '0 * * * *',
+    '0 8 * * *',
     async () => {
+      console.log('[cron] Birthday automation started —', new Date().toISOString());
       try {
-        const settings = await birthdayService.getSettings();
-        if (!settings.isActive) return;
-
-        // Determine current hour in BRT regardless of server timezone
-        const currentHourBRT = parseInt(
-          new Intl.DateTimeFormat('en', {
-            timeZone: 'America/Sao_Paulo',
-            hour: 'numeric',
-            hour12: false,
-          }).format(new Date()),
-          10
-        );
-
-        if (currentHourBRT !== settings.sendHour) return;
-
-        console.log(`[cron] Birthday automation started at ${currentHourBRT}h BRT —`, new Date().toISOString());
         const result = await birthdayService.runBirthdayAutomation();
         console.log(`[cron] Birthday automation complete: ${result.processed} processed, ${result.skipped} skipped.`);
       } catch (err) {
         console.error('[cron] Birthday automation error:', (err as Error).message);
       }
     },
-    { timezone: 'America/Sao_Paulo' }
+    {
+      timezone: 'America/Sao_Paulo',
+    }
   );
 
   // ─── Trinks sync — every 6 hours ──────────────────────────────────────────
@@ -111,62 +98,51 @@ export function startCronJobs(): void {
       } catch (err) {
         console.error('[cron] Review push error:', (err as Error).message);
       }
-    },
-    { timezone: 'America/Sao_Paulo' }
-  );
 
-  // ─── Trinks can_post sync — daily at 03:00 BRT ────────────────────────────
-  cron.schedule(
-    '0 3 * * *',
-    async () => {
-      console.log('[cron] Trinks can_post sync started —', new Date().toISOString());
+      // WhatsApp pós-atendimento (2h após concluído)
       try {
-        const result = await trinksSync.syncCanPost();
-        console.log(`[cron] Trinks can_post sync complete: checked=${result.checked}, granted=${result.granted}`);
+        const result = await runPosAtendimento();
+        if (result.sent > 0) console.log(`[cron] Pós-atendimento WhatsApp: ${result.sent} enviados.`);
       } catch (err) {
-        console.error('[cron] Trinks can_post sync error:', (err as Error).message);
+        console.error('[cron] Pós-atendimento WhatsApp error:', (err as Error).message);
       }
     },
     { timezone: 'America/Sao_Paulo' }
   );
 
-  // ─── Birthday calendar audit — daily at 00:01 BRT ─────────────────────────
-  // Reads all users with birth_date and logs how many are registered,
-  // how many have birthdays this month, and how many today.
-  // Ensures the calendar is always consistent with the users table.
+  // ─── Lembrete 24h — daily at 09:00 BRT ───────────────────────────────────
   cron.schedule(
-    '1 0 * * *',
+    '0 9 * * *',
     async () => {
+      console.log('[cron] Lembrete 24h started —', new Date().toISOString());
       try {
-        await birthdayService.auditCalendar();
+        const result = await runLembrete24h();
+        console.log(`[cron] Lembrete 24h: ${result.sent} enviados, ${result.skipped} ignorados.`);
       } catch (err) {
-        console.error('[cron] Birthday audit error:', (err as Error).message);
+        console.error('[cron] Lembrete 24h error:', (err as Error).message);
       }
     },
     { timezone: 'America/Sao_Paulo' }
   );
 
-  // ─── Recurring push campaigns — every 15 min ──────────────────────────────
-  // Checks for recurring campaigns whose next_send is in the past and fires them.
+  // ─── Retenção WhatsApp — daily at 10:00 BRT ───────────────────────────────
   cron.schedule(
-    '*/15 * * * *',
+    '0 10 * * *',
     async () => {
+      console.log('[cron] Retenção WhatsApp started —', new Date().toISOString());
       try {
-        const result = await adminService.processRecurringCampaigns();
-        if (result.processed > 0) {
-          console.log(`[cron] Recurring campaigns: ${result.processed} sent.`);
-        }
+        const result = await runRetencaoWhatsApp();
+        console.log(`[cron] Retenção WhatsApp: 30d=${result.sent30} enviados, 60d=${result.sent60} enviados, ${result.skipped} ignorados.`);
       } catch (err) {
-        console.error('[cron] Recurring campaigns error:', (err as Error).message);
+        console.error('[cron] Retenção WhatsApp error:', (err as Error).message);
       }
     },
     { timezone: 'America/Sao_Paulo' }
   );
 
-  console.log('   Cron jobs   : ✓ birthday @ configurable BRT hour');
-  console.log('                 ✓ birthday calendar audit @ 00:01 BRT');
+  console.log('   Cron jobs   : ✓ birthday @ 08:00 BRT');
+  console.log('                 ✓ lembrete 24h @ 09:00 BRT');
+  console.log('                 ✓ retencao wpp @ 10:00 BRT');
   console.log('                 ✓ trinks sync every 6 h');
-  console.log('                 ✓ trinks can_post sync @ 03:00 BRT');
   console.log('                 ✓ review push every 30 min');
-  console.log('                 ✓ recurring push campaigns every 15 min');
 }

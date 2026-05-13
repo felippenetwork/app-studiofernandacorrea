@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -21,10 +21,14 @@ import { useBookingStore } from '../../store/bookingStore';
 
 type Nav = NativeStackNavigationProp<BookingStackParamList, 'Services'>;
 
-// Normaliza para comparação: minúsculas + sem acentos
-function normalizeCategory(s: string): string {
-  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-}
+const CATEGORIES: { key: ServiceCategory | 'todos'; label: string }[] = [
+  { key: 'todos', label: 'Todos' },
+  { key: 'cabelo', label: 'Cabelo' },
+  { key: 'unhas', label: 'Unhas' },
+  { key: 'sobrancelha', label: 'Sobrancelha' },
+  { key: 'maquiagem', label: 'Maquiagem' },
+  { key: 'estetica', label: 'Estética' },
+];
 
 export function ServicesScreen() {
   const navigation = useNavigation<Nav>();
@@ -37,33 +41,10 @@ export function ServicesScreen() {
     staleTime: 1000 * 60 * 10,
   });
 
-  const { data: remoteCategories = [] } = useQuery({
-    queryKey: ['service-categories'],
-    queryFn: servicesService.getServiceCategories,
-    staleTime: 1000 * 60 * 30,
-  });
-
-  // Categories that have at least one active service (sem acentos, case-insensitive)
-  const availableCategories = useMemo(() => {
-    const occupiedKeys = new Set(
-      services.flatMap((s) =>
-        (s.categories?.length ? s.categories : [s.category]).map((c) => normalizeCategory(c ?? ''))
-      )
-    );
-    const all = [{ key: 'todos', label: 'Todos' }, ...remoteCategories];
-    return all.filter(
-      (cat) => cat.key === 'todos' || occupiedKeys.has(normalizeCategory(cat.key))
-    );
-  }, [services, remoteCategories]);
-
   const filtered =
     activeCategory === 'todos'
       ? services
-      : services.filter((s) =>
-          (s.categories?.length ? s.categories : [s.category]).some(
-            (c) => normalizeCategory(c ?? '') === activeCategory
-          )
-        );
+      : services.filter((s) => s.category === activeCategory);
 
   const handleSelect = (service: Service) => {
     selectService(service);
@@ -105,9 +86,9 @@ export function ServicesScreen() {
     <View style={styles.container}>
       <Header title="Serviços" subtitle="Escolha o serviço" />
 
-      {/* Category filter — only shows categories with active services */}
+      {/* Category filter */}
       <FlatList
-        data={availableCategories}
+        data={CATEGORIES}
         keyExtractor={(item) => item.key}
         renderItem={({ item }) => (
           <TouchableOpacity

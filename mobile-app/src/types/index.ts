@@ -22,7 +22,6 @@ export type ServiceCategory =
   | 'estetica'
   | 'maquiagem'
   | 'sobrancelha'
-  | 'cilios'
   | 'depilacao'
   | 'outros';
 
@@ -41,7 +40,6 @@ export interface Service {
   price: number;
   durationMinutes: number;
   category: ServiceCategory;
-  categories?: ServiceCategory[];
   imageUrl?: string;
   isActive: boolean;
   bookingFeeType?: 'fixed' | 'percentage';

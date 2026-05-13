@@ -1,5 +1,6 @@
 import { appointmentsRepository } from './appointments.repository';
 import { adminNotificationsService } from '../admin-notifications/admin-notifications.service';
+import { sendAppointmentConfirmation } from '../whatsapp/whatsapp.service';
 import { CreateAppointmentInput, BOOKING_FEE, DbAppointment } from '../../types';
 import { hasSupabase } from '../../config/env';
 import { MOCK_APPOINTMENTS } from './appointments.mock';
@@ -83,6 +84,14 @@ export const appointmentsService = {
       message: `Agendamento criado para ${input.appointmentDate} às ${input.appointmentTime}.`,
       entityType: 'appointment',
       entityId: appointment.id,
+    }).catch(() => {});
+
+    sendAppointmentConfirmation({
+      userId,
+      serviceId:      input.serviceId,
+      professionalId: input.professionalId,
+      appointmentDate: input.appointmentDate,
+      appointmentTime: input.appointmentTime,
     }).catch(() => {});
 
     // Trinks sync runs in payments.service.ts AFTER the booking fee is confirmed.

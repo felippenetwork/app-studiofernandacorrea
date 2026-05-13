@@ -7,22 +7,12 @@ import { AuthenticatedRequest } from '../../types';
 
 export const paymentsRouter = Router();
 
-const cardDataSchema = z.object({
-  number: z.string().min(14).max(19),
-  holderName: z.string().min(2),
-  expiryMonth: z.string().length(2),
-  expiryYear: z.string().length(4),
-  cvv: z.string().min(3).max(4),
-  brand: z.string().optional(),
-});
-
 const createPaymentSchema = z.object({
   appointmentId: z.string().uuid('ID de agendamento inválido'),
   method: z.enum(['pix', 'credit_card', 'debit_card']),
-  cardData: cardDataSchema.optional(),
 });
 
-// POST /api/payments/booking-fee
+// POST /api/payments/booking-fee — pay the R$40 reservation fee
 paymentsRouter.post(
   '/booking-fee',
   authMiddleware,
@@ -33,8 +23,7 @@ paymentsRouter.post(
       const result = await paymentsService.createBookingFee(
         userId,
         req.body.appointmentId,
-        req.body.method,
-        req.body.cardData
+        req.body.method
       );
       res.status(201).json({
         data: result,
@@ -51,9 +40,11 @@ paymentsRouter.post(
   }
 );
 
-// POST /api/payments/webhook — Getnet webhook
+// POST /api/payments/webhook — Mercado Pago webhook
 paymentsRouter.post('/webhook', async (req: Request, res: Response): Promise<void> => {
+  // Acknowledge immediately
   res.json({ received: true });
+
   try {
     await paymentsService.processWebhook(req.body);
   } catch (err) {

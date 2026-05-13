@@ -43,7 +43,6 @@ export interface Service {
   price: number;
   durationMinutes: number;
   category: string;
-  categories: string[];
   imageUrl?: string;
   isActive: boolean;
   bookingFeeApplicable: boolean;
@@ -188,20 +187,12 @@ export interface PushCampaign {
   id: string;
   title: string;
   body: string;
-  segment: string;
-  type: 'unico' | 'manual' | 'recorrente';
-  status: 'rascunho' | 'agendada' | 'enviada' | 'manual' | 'recorrente' | 'cancelada';
+  segment: 'todos' | 'vip' | 'ativos' | 'inativos';
+  status: 'rascunho' | 'agendada' | 'enviada' | 'cancelada';
   scheduledAt?: string;
   sentAt?: string;
   sentCount: number;
   createdAt?: string;
-  // Recurrence
-  recurrenceType?: 'weekly' | 'interval';
-  recurrenceDays?: number[];
-  recurrenceInterval?: number;
-  recurrenceHour?: number;
-  recurrenceNextSend?: string;
-  recurrenceActive?: boolean;
 }
 
 // ─── App Settings ────────────────────────────────────────────────────────────
@@ -283,4 +274,63 @@ export interface Paginated<T> {
   total: number;
   page: number;
   limit: number;
+}
+
+// ─── Schedules ───────────────────────────────────────────────────────────────
+
+export interface ProfessionalSchedule {
+  id: string;
+  professional_id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  is_active: boolean;
+}
+
+export interface ScheduleBlock {
+  id: string;
+  professional_id: string;
+  block_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  reason: string | null;
+  created_at: string;
+}
+
+// ─── Commissions ─────────────────────────────────────────────────────────────
+
+export interface CommissionRate {
+  id: string;
+  professional_id: string;
+  service_id: string;
+  commission_percentage: number;
+  professional?: { id: string; name: string };
+  service?: { id: string; name: string; category: string };
+}
+
+export interface CommissionRecord {
+  id: string;
+  appointment_id: string;
+  professional_id: string;
+  service_id: string;
+  service_price: number;
+  commission_percentage: number;
+  commission_amount: number;
+  status: 'pendente' | 'pago';
+  paid_at: string | null;
+  notes: string | null;
+  created_at: string;
+  professional?: { id: string; name: string };
+  service?: { id: string; name: string };
+  appointment?: { appointment_date: string; appointment_time: string };
+}
+
+export interface CommissionSummary {
+  professional_id: string;
+  professional_name: string;
+  professional_avatar: string | null;
+  total_pendente: number;
+  total_pago: number;
+  count_pendente: number;
+  count_pago: number;
 }

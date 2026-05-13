@@ -4,7 +4,6 @@ import jwt from 'jsonwebtoken';
 import { env, hasSupabase } from '../../config/env';
 import { supabase } from '../../config/supabase';
 import { emailService } from '../../services/email.service';
-import { birthdayService } from '../birthday/birthday.service';
 import { AuthTokens, DbUser } from '../../types';
 import { RegisterInput, LoginInput } from './auth.validator';
 
@@ -105,18 +104,12 @@ export const authService = {
     if (error || !user) throw new Error('Erro ao criar conta. Tente novamente.');
 
     if (needsVerification && verificationToken) {
+      // Fire-and-forget email — don't block the response
       emailService
         .sendEmailVerification(input.email, input.name, verificationToken)
         .catch(console.error);
 
       return { emailVerificationRequired: true, email: input.email };
-    }
-
-    // Fire-and-forget birthday check — if today is their birthday, send coupon now
-    if (input.birth_date) {
-      birthdayService
-        .onUserBirthdateChanged((user as DbUser).id, input.name, input.birth_date)
-        .catch(console.error);
     }
 
     return {

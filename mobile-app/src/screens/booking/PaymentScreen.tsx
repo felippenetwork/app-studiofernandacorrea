@@ -7,8 +7,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  TextInput,
-  Linking,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useNavigation } from '@react-navigation/native';
@@ -19,7 +17,7 @@ import { BookingStackParamList, PaymentMethod } from '../../types';
 import { colors, textStyles, spacing, borderRadius, shadows } from '../../theme';
 import { Header, Button, Card, Divider } from '../../components/common';
 import { useBookingStore } from '../../store/bookingStore';
-import { appointmentsService, CreateAppointmentResult, CardData } from '../../services/api/appointments';
+import { appointmentsService, CreateAppointmentResult } from '../../services/api/appointments';
 import { formatCurrency } from '../../utils/formatters';
 import { Service } from '../../types';
 
@@ -30,33 +28,12 @@ function calcBookingFee(service: Service, servicePrice: number): number {
   return service.bookingFeeValue ?? 40;
 }
 
-function detectBrand(number: string): string {
-  const n = number.replace(/\s/g, '');
-  if (/^4/.test(n)) return 'Visa';
-  if (/^(5[1-5]|2[2-7])/.test(n)) return 'Mastercard';
-  if (/^3[47]/.test(n)) return 'Amex';
-  if (/^(636368|438935|504175|451416|636297|5067|4576|4011)/.test(n)) return 'Elo';
-  if (/^(606282|3841)/.test(n)) return 'Hipercard';
-  return '';
-}
-
-function formatCardNumber(raw: string): string {
-  const digits = raw.replace(/\D/g, '').slice(0, 16);
-  return digits.replace(/(.{4})/g, '$1 ').trim();
-}
-
-function formatExpiry(raw: string): string {
-  const digits = raw.replace(/\D/g, '').slice(0, 4);
-  if (digits.length <= 2) return digits;
-  return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-}
-
 type Nav = NativeStackNavigationProp<BookingStackParamList, 'Payment'>;
 
 const PAYMENT_METHODS: { key: PaymentMethod; label: string; icon: string; description: string }[] = [
   { key: 'pix',         label: 'Pix',              icon: 'qr-code-outline', description: 'Aprovação instantânea' },
-  { key: 'credit_card', label: 'Cartão de Crédito', icon: 'card-outline',    description: 'Aprovado na hora' },
-  { key: 'debit_card',  label: 'Cartão de Débito',  icon: 'card-outline',    description: 'Autenticação pelo banco' },
+  { key: 'credit_card', label: 'Cartão de Crédito', icon: 'card-outline',    description: 'Em até 3x sem juros' },
+  { key: 'debit_card',  label: 'Cartão de Débito',  icon: 'card-outline',    description: 'Aprovação instantânea' },
 ];
 
 export function PaymentScreen() {
@@ -66,63 +43,22 @@ export function PaymentScreen() {
     useBookingStore();
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
   const [pixResult, setPixResult] = useState<{ qrCode?: string; copyPaste?: string } | null>(null);
-  const [debitPending, setDebitPending] = useState(false);
   const [copied, setCopied] = useState(false);
-
-  // Card form state
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardHolder, setCardHolder] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
-
-  const isCardMethod = selectedMethod === 'credit_card' || selectedMethod === 'debit_card';
-  const cardBrand = detectBrand(cardNumber);
-
-  function buildCardData(): CardData | undefined {
-    if (!isCardMethod) return undefined;
-    const [mm, yy] = cardExpiry.split('/');
-    return {
-      number: cardNumber.replace(/\s/g, ''),
-      holderName: cardHolder.trim(),
-      expiryMonth: (mm ?? '').padStart(2, '0'),
-      expiryYear: yy ? `20${yy}` : '',
-      cvv: cardCvv,
-      brand: cardBrand || undefined,
-    };
-  }
-
-  function validateCard(): string | null {
-    const digits = cardNumber.replace(/\s/g, '');
-    if (digits.length < 14) return 'Número de cartão inválido.';
-    if (cardHolder.trim().length < 3) return 'Nome do titular obrigatório.';
-    const [mm, yy] = cardExpiry.split('/');
-    if (!mm || !yy || mm.length !== 2 || yy.length !== 2) return 'Validade inválida (MM/AA).';
-    const month = parseInt(mm, 10);
-    if (month < 1 || month > 12) return 'Mês de validade inválido.';
-    if (cardCvv.length < 3) return 'CVV inválido.';
-    return null;
-  }
 
   const { mutate: confirmPayment, isPending: loading } = useMutation({
     mutationFn: () =>
       appointmentsService.createAppointment({
         booking: { selectedService, selectedVariation, selectedProfessional, selectedDate, selectedTime, selectedCoupon },
         paymentMethod: selectedMethod!,
-        cardData: buildCardData(),
       }),
     onSuccess: (result: CreateAppointmentResult) => {
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
 
       if (result.pixQrCode || result.pixCopyPaste) {
+        // PIX flow: show inline QR code screen
         setPixResult({ qrCode: result.pixQrCode, copyPaste: result.pixCopyPaste });
-      } else if (result.redirectUrl) {
-        // Debit 3DS: open bank authentication in browser
-        setDebitPending(true);
-        Linking.openURL(result.redirectUrl).catch(() => {
-          Alert.alert('Erro', 'Não foi possível abrir a autenticação. Tente novamente.');
-          setDebitPending(false);
-        });
       } else {
+        // Card/instant approval
         Alert.alert(
           '✓ Agendamento Confirmado',
           `${selectedService?.name} confirmado para ${selectedDate} às ${selectedTime}.\n\nTaxa de reserva de ${formatCurrency(bookingFee)} processada com sucesso.`,
@@ -152,10 +88,6 @@ export function PaymentScreen() {
       Alert.alert('Forma de pagamento', 'Selecione uma forma de pagamento para continuar.');
       return;
     }
-    if (isCardMethod) {
-      const err = validateCard();
-      if (err) { Alert.alert('Dados do cartão', err); return; }
-    }
     confirmPayment();
   };
 
@@ -175,45 +107,6 @@ export function PaymentScreen() {
 
   const servicePrice = selectedVariation?.price ?? selectedService.price;
   const bookingFee = calcBookingFee(selectedService, servicePrice);
-
-  // ─── Debit 3DS Pending Screen ─────────────────────────────────────────────
-
-  if (debitPending) {
-    return (
-      <View style={styles.container}>
-        <Header title="Autenticação do Banco" subtitle="Aguardando confirmação" showBack={false} />
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <Card style={styles.pixCard} shadow="md">
-            <View style={styles.pixHeader}>
-              <Ionicons name="shield-checkmark-outline" size={28} color={colors.primary} />
-              <Text style={styles.pixTitle}>Autenticação necessária</Text>
-              <Text style={styles.pixSubtitle}>
-                Seu banco abrirá no navegador para confirmar o pagamento de{' '}
-                <Text style={{ fontWeight: '700' }}>{formatCurrency(bookingFee)}</Text>.
-              </Text>
-            </View>
-            <Divider style={styles.divider} />
-            <View style={styles.pixInstructions}>
-              {[
-                'O navegador abriu com a página do seu banco',
-                'Autentique o pagamento conforme solicitado',
-                'Após confirmar, volte ao app',
-                'Seu agendamento será confirmado automaticamente',
-              ].map((step, i) => (
-                <View key={i} style={styles.stepRow}>
-                  <View style={styles.stepBadge}>
-                    <Text style={styles.stepNumber}>{i + 1}</Text>
-                  </View>
-                  <Text style={styles.stepText}>{step}</Text>
-                </View>
-              ))}
-            </View>
-          </Card>
-          <Button label="Ir para meus agendamentos" onPress={() => { resetBooking(); navigation.getParent()?.navigate('MyAppointments'); }} style={styles.cta} />
-        </ScrollView>
-      </View>
-    );
-  }
 
   // ─── PIX QR Code Screen ───────────────────────────────────────────────────
 
@@ -295,7 +188,7 @@ export function PaymentScreen() {
 
           <View style={styles.mpBadge}>
             <Ionicons name="shield-checkmark-outline" size={14} color={colors.success} />
-            <Text style={styles.mpText}>Pagamento seguro via Getnet (Santander)</Text>
+            <Text style={styles.mpText}>Pagamento seguro via Mercado Pago</Text>
           </View>
 
           <Button
@@ -376,71 +269,9 @@ export function PaymentScreen() {
           </View>
         )}
 
-        {selectedMethod === 'debit_card' && (
-          <View style={styles.pixNotice}>
-            <Ionicons name="information-circle-outline" size={16} color={colors.info} />
-            <Text style={styles.pixNoticeText}>
-              O débito exige autenticação pelo seu banco. Após confirmar, você será redirecionado para concluir.
-            </Text>
-          </View>
-        )}
-
-        {/* Card form */}
-        {isCardMethod && (
-          <View style={styles.cardForm}>
-            <Text style={styles.cardFormTitle}>Dados do cartão</Text>
-
-            <View style={styles.cardNumberRow}>
-              <TextInput
-                style={[styles.cardInput, { flex: 1 }]}
-                placeholder="Número do cartão"
-                placeholderTextColor={colors.textTertiary}
-                value={cardNumber}
-                onChangeText={(t) => setCardNumber(formatCardNumber(t))}
-                keyboardType="numeric"
-                maxLength={19}
-              />
-              {cardBrand ? (
-                <Text style={styles.cardBrandBadge}>{cardBrand}</Text>
-              ) : null}
-            </View>
-
-            <TextInput
-              style={styles.cardInput}
-              placeholder="Nome impresso no cartão"
-              placeholderTextColor={colors.textTertiary}
-              value={cardHolder}
-              onChangeText={setCardHolder}
-              autoCapitalize="characters"
-            />
-
-            <View style={styles.cardRow}>
-              <TextInput
-                style={[styles.cardInput, styles.cardInputHalf]}
-                placeholder="Validade (MM/AA)"
-                placeholderTextColor={colors.textTertiary}
-                value={cardExpiry}
-                onChangeText={(t) => setCardExpiry(formatExpiry(t))}
-                keyboardType="numeric"
-                maxLength={5}
-              />
-              <TextInput
-                style={[styles.cardInput, styles.cardInputHalf]}
-                placeholder="CVV"
-                placeholderTextColor={colors.textTertiary}
-                value={cardCvv}
-                onChangeText={(t) => setCardCvv(t.replace(/\D/g, '').slice(0, 4))}
-                keyboardType="numeric"
-                maxLength={4}
-                secureTextEntry
-              />
-            </View>
-          </View>
-        )}
-
         <View style={styles.mpBadge}>
           <Ionicons name="shield-checkmark-outline" size={14} color={colors.success} />
-          <Text style={styles.mpText}>Pagamento seguro via Getnet (Santander)</Text>
+          <Text style={styles.mpText}>Pagamento seguro via Mercado Pago</Text>
         </View>
 
         <Button
@@ -567,40 +398,6 @@ const styles = StyleSheet.create({
   copyButtonDone: { backgroundColor: colors.successLight },
   copyButtonText: { ...textStyles.labelMedium, color: colors.primary },
   copyButtonTextDone: { color: colors.success },
-
-  // Card form
-  cardForm: {
-    backgroundColor: colors.backgroundCard,
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing[4],
-    marginBottom: spacing[4],
-    gap: spacing[3],
-  },
-  cardFormTitle: { ...textStyles.labelLarge, color: colors.textPrimary, marginBottom: spacing[1] },
-  cardNumberRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
-  cardBrandBadge: {
-    ...textStyles.caption,
-    color: colors.primary,
-    fontWeight: '700',
-    backgroundColor: colors.primaryGhost,
-    paddingHorizontal: spacing[2],
-    paddingVertical: spacing[1],
-    borderRadius: borderRadius.sm,
-  },
-  cardInput: {
-    height: 44,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: borderRadius.sm,
-    paddingHorizontal: spacing[3],
-    ...textStyles.bodyMedium,
-    color: colors.textPrimary,
-    backgroundColor: colors.background,
-  },
-  cardRow: { flexDirection: 'row', gap: spacing[3] },
-  cardInputHalf: { flex: 1 },
 
   // Step instructions
   pixInstructions: { gap: spacing[3], marginBottom: spacing[5] },

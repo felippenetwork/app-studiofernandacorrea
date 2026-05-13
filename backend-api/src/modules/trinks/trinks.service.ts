@@ -9,8 +9,6 @@ import {
   TrinksServicoAPI,
   TrinksProfissionalAPI,
   TrinksHorarioDisponivelAPI,
-  TrinksClienteAPI,
-  TrinksClient,
 } from './trinks.types';
 
 // ─── Mock data (used when TRINKS_API_KEY is not configured) ───────────────────
@@ -183,29 +181,6 @@ class TrinksService_ {
     // Trinks may return { id } or { agendamento: { id } }
     const id = data?.id ?? data?.agendamento?.id;
     return { id: id != null ? String(id) : undefined };
-  }
-
-  // ─── Clients ───────────────────────────────────────────────────────────────
-  // Endpoint: GET /v1/clientes
-  // Returns all clients registered in Trinks for this company.
-
-  async getClients(): Promise<TrinksClient[]> {
-    if (!hasTrinks) return [];
-    try {
-      const { data } = await this.getClient().get<TrinksClienteAPI[] | { clientes?: TrinksClienteAPI[]; items?: TrinksClienteAPI[] }>('/v1/clientes');
-      const list: TrinksClienteAPI[] = Array.isArray(data)
-        ? data
-        : (data as any)?.clientes ?? (data as any)?.items ?? [];
-      return list.map((c) => ({
-        id: String(c.id),
-        name: c.nome,
-        phone: c.telefone,
-        email: c.email,
-      }));
-    } catch (err) {
-      console.error('[trinks] getClients error:', (err as Error).message);
-      return [];
-    }
   }
 
   // ─── Cancel Appointment ────────────────────────────────────────────────────

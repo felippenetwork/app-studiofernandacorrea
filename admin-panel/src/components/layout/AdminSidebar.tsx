@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Palette, Scissors, Users, Calendar, CalendarDays, Tag, Gift,
   Bell, Send, Cake, MessageSquare, Star, CreditCard,
-  UserCog, ClipboardList, Plug,
+  UserCog, ClipboardList, Plug, CalendarClock, BadgeDollarSign, TrendingDown, MessageCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -20,8 +20,8 @@ const navGroups = [
     items: [
       { label: 'Serviços',       href: '/services',      icon: Scissors },
       { label: 'Profissionais',  href: '/professionals', icon: Users },
+      { label: 'Agenda',         href: '/agenda',        icon: CalendarClock },
       { label: 'Agendamentos',   href: '/appointments',  icon: CalendarDays },
-      { label: 'Configurações',  href: '/schedule',      icon: Calendar },
       { label: 'Clientes',       href: '/customers',     icon: Users },
     ],
   },
@@ -33,14 +33,17 @@ const navGroups = [
       { label: 'Notificações',    href: '/notifications',   icon: Bell },
       { label: 'Push Campaigns',  href: '/push-campaigns',  icon: Send },
       { label: 'Aniversários',    href: '/birthday',        icon: Cake },
+      { label: 'WhatsApp',        href: '/whatsapp',        icon: MessageCircle },
     ],
   },
   {
     label: 'Gestão',
     items: [
-      { label: 'Feedbacks',  href: '/feedback',  icon: MessageSquare },
-      { label: 'Avaliações', href: '/reviews',   icon: Star },
-      { label: 'Pagamentos', href: '/payments',  icon: CreditCard },
+      { label: 'Feedbacks',  href: '/feedback',   icon: MessageSquare },
+      { label: 'Avaliações', href: '/reviews',    icon: Star },
+      { label: 'Pagamentos', href: '/payments',   icon: CreditCard },
+      { label: 'Comissões',  href: '/comissoes',  icon: BadgeDollarSign },
+      { label: 'Retenção',   href: '/retencao',   icon: TrendingDown },
     ],
   },
   {

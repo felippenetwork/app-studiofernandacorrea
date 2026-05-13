@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { validate } from '../../middleware/validate.middleware';
 import { adminAuthService } from './admin-auth.service';
 import { adminAuthMiddleware } from '../../middleware/adminAuth.middleware';
-import { adminService } from '../admin/admin.service';
 
 export const adminAuthRouter = Router();
 
@@ -17,13 +16,6 @@ adminAuthRouter.post('/login', validate(loginSchema), async (req: Request, res: 
   try {
     const { email, password } = req.body;
     const result = await adminAuthService.login(email, password);
-    const ip = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ?? req.socket.remoteAddress;
-    adminService.createAuditLog({
-      adminUserId: result.admin.id,
-      adminEmail: result.admin.email,
-      action: 'admin.login',
-      ipAddress: ip,
-    }).catch(console.error);
     res.json({ data: result, message: 'Login realizado com sucesso.' });
   } catch (err) {
     res.status(401).json({ error: 'Unauthorized', message: (err as Error).message });

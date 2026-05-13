@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { validate } from '../../middleware/validate.middleware';
 import { usersRepository } from './users.repository';
-import { birthdayService } from '../birthday/birthday.service';
 import { AuthenticatedRequest } from '../../types';
 import { Request, Response } from 'express';
 
@@ -39,16 +38,9 @@ const updateSchema = z.object({
 // PATCH /api/users/me
 usersRouter.patch('/me', validate(updateSchema), async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id, name } = (req as AuthenticatedRequest).user;
+    const { id } = (req as AuthenticatedRequest).user;
     const updated = await usersRepository.update(id, req.body);
     res.json({ data: updated, message: 'Perfil atualizado.' });
-
-    // If birth_date was updated, check if today is their birthday
-    if (req.body.birth_date) {
-      birthdayService
-        .onUserBirthdateChanged(id, updated?.name ?? name, req.body.birth_date)
-        .catch(console.error);
-    }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro ao atualizar.';
     res.status(500).json({ error: 'InternalError', message });
