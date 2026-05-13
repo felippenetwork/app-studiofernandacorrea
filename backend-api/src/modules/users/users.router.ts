@@ -5,6 +5,9 @@ import { validate } from '../../middleware/validate.middleware';
 import { usersRepository } from './users.repository';
 import { AuthenticatedRequest } from '../../types';
 import { Request, Response } from 'express';
+import { loyaltyService } from '../loyalty/loyalty.service';
+import { hasSupabase } from '../../config/env';
+import { supabase } from '../../config/supabase';
 
 export const usersRouter = Router();
 
@@ -24,6 +27,74 @@ usersRouter.get('/me', async (req: Request, res: Response): Promise<void> => {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Erro ao buscar perfil.';
     res.status(500).json({ error: 'InternalError', message });
+  }
+});
+
+// GET /api/users/loyalty
+usersRouter.get('/loyalty', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id: userId } = (req as AuthenticatedRequest).user;
+    const settings = await loyaltyService.getSettings();
+
+    if (!settings.isActive && !settings.visitRewardActive) {
+      res.json({ data: null });
+      return;
+    }
+
+    let balance = 0;
+    let lifetimePoints = 0;
+    let visitCount = 0;
+
+    if (hasSupabase) {
+      const { data: txs } = await supabase
+        .from('loyalty_points')
+        .select('points')
+        .eq('user_id', userId);
+
+      for (const t of txs ?? []) {
+        const p = Number(t.points);
+        balance += p;
+        if (p > 0) lifetimePoints += p;
+      }
+
+      const { count } = await supabase
+        .from('appointments')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('status', 'concluido');
+
+      visitCount = count ?? 0;
+    }
+
+    const tier = lifetimePoints >= settings.goldThreshold
+      ? 'ouro'
+      : lifetimePoints >= settings.silverThreshold
+      ? 'prata'
+      : 'bronze';
+
+    const nextTierPoints = tier === 'bronze'
+      ? settings.silverThreshold
+      : tier === 'prata'
+      ? settings.goldThreshold
+      : null;
+
+    res.json({
+      data: {
+        pointsActive:             settings.isActive,
+        visitRewardActive:        settings.visitRewardActive,
+        tier,
+        balance,
+        lifetimePoints,
+        redemptionThreshold:      settings.redemptionThreshold,
+        nextTierPoints,
+        visitCount,
+        visitRewardCount:         settings.visitRewardCount,
+        visitRewardDiscountType:  settings.visitRewardDiscountType,
+        visitRewardDiscountValue: settings.visitRewardDiscountValue,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'InternalError', message: (err as Error).message });
   }
 });
 

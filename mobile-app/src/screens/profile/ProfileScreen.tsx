@@ -19,8 +19,179 @@ import { Avatar, Card, Divider } from '../../components/common';
 import { useAuthStore } from '../../store/authStore';
 import { appointmentsService } from '../../services/api/appointments';
 import { settingsService } from '../../services/api/settings';
+import { loyaltyService, LoyaltyInfo } from '../../services/api/loyalty';
 
 type Nav = NativeStackNavigationProp<ProfileStackParamList, 'ProfileMain'>;
+
+// ─── Loyalty Card ─────────────────────────────────────────────────────────────
+
+const TIER_CONFIG = {
+  bronze: { label: 'Bronze', icon: '🥉', color: '#B45309', bg: '#FEF3C7' },
+  prata:  { label: 'Prata',  icon: '🥈', color: '#475569', bg: '#F1F5F9' },
+  ouro:   { label: 'Ouro',   icon: '🥇', color: '#B45309', bg: '#FEF9C3' },
+};
+
+function ProgressBar({ value, max, color }: { value: number; max: number; color: string }) {
+  const pct = max > 0 ? Math.min(value / max, 1) : 0;
+  return (
+    <View style={loyaltyStyles.progressTrack}>
+      <View style={[loyaltyStyles.progressFill, { width: `${pct * 100}%` as any, backgroundColor: color }]} />
+    </View>
+  );
+}
+
+function LoyaltyCard({ info }: { info: LoyaltyInfo }) {
+  const tier = TIER_CONFIG[info.tier];
+
+  const visitProgress = info.visitRewardActive ? info.visitCount % info.visitRewardCount : 0;
+  const visitGoal = info.visitRewardCount;
+  const rewardLabel = info.visitRewardDiscountType === 'percentage' && info.visitRewardDiscountValue >= 100
+    ? 'serviço grátis'
+    : info.visitRewardDiscountType === 'percentage'
+    ? `${info.visitRewardDiscountValue}% de desconto`
+    : `R$ ${info.visitRewardDiscountValue.toFixed(2)} de desconto`;
+
+  return (
+    <View style={loyaltyStyles.card}>
+      {/* Header */}
+      <View style={loyaltyStyles.header}>
+        <View>
+          <Text style={loyaltyStyles.title}>Programa de Fidelidade</Text>
+          <Text style={loyaltyStyles.subtitle}>Studio Fernanda Correa</Text>
+        </View>
+        <View style={[loyaltyStyles.tierBadge, { backgroundColor: tier.bg }]}>
+          <Text style={loyaltyStyles.tierIcon}>{tier.icon}</Text>
+          <Text style={[loyaltyStyles.tierLabel, { color: tier.color }]}>{tier.label}</Text>
+        </View>
+      </View>
+
+      {/* Divider */}
+      <View style={loyaltyStyles.divider} />
+
+      {/* Points section */}
+      {info.pointsActive && (
+        <View style={loyaltyStyles.section}>
+          <View style={loyaltyStyles.row}>
+            <Text style={loyaltyStyles.sectionLabel}>Pontos disponíveis</Text>
+            <Text style={loyaltyStyles.sectionValue}>{info.balance} pts</Text>
+          </View>
+          <ProgressBar value={info.balance} max={info.redemptionThreshold} color={colors.primary} />
+          <Text style={loyaltyStyles.hint}>
+            {info.balance >= info.redemptionThreshold
+              ? '🎉 Parabéns! Você ganhou um cupom de desconto!'
+              : `Faltam ${info.redemptionThreshold - info.balance} pts para ganhar um cupom`}
+          </Text>
+          {info.nextTierPoints && (
+            <View style={loyaltyStyles.tierRow}>
+              <Text style={loyaltyStyles.tierHint}>
+                Progresso para {info.tier === 'bronze' ? 'Prata 🥈' : 'Ouro 🥇'}
+              </Text>
+              <Text style={loyaltyStyles.tierHint}>
+                {info.lifetimePoints}/{info.nextTierPoints} pts
+              </Text>
+            </View>
+          )}
+          {info.nextTierPoints && (
+            <ProgressBar value={info.lifetimePoints} max={info.nextTierPoints} color="#94A3B8" />
+          )}
+        </View>
+      )}
+
+      {/* Visit reward section */}
+      {info.visitRewardActive && (
+        <>
+          {info.pointsActive && <View style={loyaltyStyles.divider} />}
+          <View style={loyaltyStyles.section}>
+            <View style={loyaltyStyles.row}>
+              <Text style={loyaltyStyles.sectionLabel}>Visitas neste ciclo</Text>
+              <Text style={loyaltyStyles.sectionValue}>{visitProgress}/{visitGoal}</Text>
+            </View>
+            <ProgressBar value={visitProgress} max={visitGoal} color="#10B981" />
+            <Text style={loyaltyStyles.hint}>
+              {visitProgress >= visitGoal
+                ? `🎁 Você ganhou um ${rewardLabel}!`
+                : `Faltam ${visitGoal - visitProgress} visita${visitGoal - visitProgress !== 1 ? 's' : ''} para ganhar ${rewardLabel}`}
+            </Text>
+          </View>
+        </>
+      )}
+    </View>
+  );
+}
+
+const loyaltyStyles = StyleSheet.create({
+  card: {
+    marginHorizontal: spacing[5],
+    marginBottom: spacing[5],
+    borderRadius: 16,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#F3E8E7',
+    overflow: 'hidden',
+    shadowColor: '#C9A4A0',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing[4],
+    backgroundColor: '#FDF8F8',
+  },
+  title: {
+    ...textStyles.bodyMedium,
+    color: colors.textPrimary,
+    fontWeight: '700',
+  },
+  subtitle: {
+    ...textStyles.caption,
+    color: colors.textTertiary,
+    marginTop: 1,
+  },
+  tierBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  tierIcon: { fontSize: 14 },
+  tierLabel: { fontSize: 12, fontWeight: '700' },
+  divider: { height: 1, backgroundColor: '#F9F0EF' },
+  section: { padding: spacing[4] },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  sectionLabel: { ...textStyles.caption, color: colors.textSecondary },
+  sectionValue: { ...textStyles.labelSmall, color: colors.primary, fontWeight: '700' },
+  progressTrack: {
+    height: 6,
+    backgroundColor: '#F3E8E7',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: 6,
+    borderRadius: 3,
+  },
+  hint: {
+    ...textStyles.caption,
+    color: colors.textTertiary,
+    marginTop: 6,
+  },
+  tierRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing[3],
+    marginBottom: 6,
+  },
+  tierHint: {
+    ...textStyles.caption,
+    color: colors.textTertiary,
+  },
+});
 
 interface MenuItem {
   icon: keyof typeof Ionicons.glyphMap;
@@ -46,6 +217,13 @@ export function ProfileScreen() {
     queryKey: ['public-config'],
     queryFn: settingsService.getPublicConfig,
     staleTime: 1000 * 60 * 10,
+  });
+
+  const { data: loyalty } = useQuery({
+    queryKey: ['my-loyalty'],
+    queryFn: loyaltyService.getMyLoyalty,
+    enabled: !!user,
+    staleTime: 1000 * 60 * 5,
   });
 
   const completedCount = appointments.filter((a) => a.status === 'concluido').length;
@@ -175,6 +353,11 @@ export function ProfileScreen() {
           </React.Fragment>
         ))}
       </Card>
+
+      {/* Loyalty card */}
+      {loyalty && (loyalty.pointsActive || loyalty.visitRewardActive) && (
+        <LoyaltyCard info={loyalty} />
+      )}
 
       {/* Menu sections */}
       {menuSections.map((section) => (
