@@ -421,13 +421,14 @@ export const adminService = {
     return result;
   },
 
-  async listAppointments({ date, status, page, limit }: { date?: string; status?: string; page: number; limit: number }) {
+  async listAppointments({ date, status, userId, page, limit }: { date?: string; status?: string; userId?: string; page: number; limit: number }) {
     if (!hasSupabase) {
       return { items: MOCK_APPOINTMENTS, total: MOCK_APPOINTMENTS.length, page, limit };
     }
-    let query = supabase.from('appointments').select('*, user:users(name,email)', { count: 'exact' });
+    let query = supabase.from('appointments').select('*, user:users(name,email), service:services(name), professional:professionals(name)', { count: 'exact' });
     if (date) query = query.eq('appointment_date', date);
     if (status) query = query.eq('status', status);
+    if (userId) query = query.eq('user_id', userId);
     query = query.order('appointment_date', { ascending: false }).range((page - 1) * limit, page * limit - 1);
     const { data, count } = await query;
     return { items: data ?? [], total: count ?? 0, page, limit };

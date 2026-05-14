@@ -241,8 +241,8 @@ adminRouter.get('/appointments/available-slots', async (req: Request, res: Respo
 
 adminRouter.get('/appointments', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { date, status, page = '1', limit = '20' } = req.query as Record<string, string>;
-    res.json({ data: await adminService.listAppointments({ date, status, page: +page, limit: +limit }) });
+    const { date, status, userId, page = '1', limit = '20' } = req.query as Record<string, string>;
+    res.json({ data: await adminService.listAppointments({ date, status, userId, page: +page, limit: +limit }) });
   } catch (err) { res.status(500).json({ error: 'InternalError', message: (err as Error).message }); }
 });
 
@@ -252,7 +252,7 @@ const createAppointmentSchema = z.object({
   professionalId: z.string(),
   appointmentDate: z.string(),
   appointmentTime: z.string(),
-  status: z.enum(['confirmado', 'pendente_pagamento']).default('confirmado'),
+  status: z.enum(['aguardando_confirmacao', 'confirmado', 'pendente_pagamento']).default('aguardando_confirmacao'),
   servicePrice: z.number().optional(),
   bookingFee: z.number().optional(),
   notes: z.string().optional(),
@@ -265,7 +265,7 @@ adminRouter.post('/appointments', requireRole('owner', 'gerente', 'recepcao'), v
 
 // PATCH /api/admin/appointments/:id/status — atualizar status e disparar comissão se concluido
 const updateStatusSchema = z.object({
-  status: z.enum(['confirmado', 'cancelado', 'concluido', 'nao_compareceu']),
+  status: z.enum(['confirmado', 'cancelado', 'concluido', 'nao_compareceu', 'pendente_pagamento', 'aguardando_confirmacao']),
   notes:  z.string().optional(),
 });
 

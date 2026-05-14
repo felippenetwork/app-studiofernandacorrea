@@ -127,6 +127,10 @@ export const appointmentsAdminApi = {
   list: (params?: { date?: string; status?: string; page?: number; limit?: number }) =>
     apiClient.get('/admin/appointments', { params }).then((r) => r.data.data),
   create: (data: any) => apiClient.post('/admin/appointments', data).then((r) => r.data.data),
+  updateStatus: (id: string, status: string) =>
+    apiClient.patch(`/admin/appointments/${id}/status`, { status }).then((r) => r.data),
+  listByUser: (userId: string) =>
+    apiClient.get('/admin/appointments', { params: { userId, limit: 50 } }).then((r) => r.data.data),
   availableSlots: (professionalId: string, serviceId: string, date: string) =>
     apiClient.get('/admin/appointments/available-slots', { params: { professionalId, serviceId, date } }).then((r) => r.data.data as { time: string; available: boolean }[]),
 };

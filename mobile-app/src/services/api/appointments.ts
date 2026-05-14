@@ -107,7 +107,7 @@ export const appointmentsService = {
         professional: booking.selectedProfessional!,
         appointmentDate: booking.selectedDate!,
         appointmentTime: booking.selectedTime!,
-        status: 'confirmado',
+        status: 'aguardando_confirmacao',
         servicePrice,
         bookingFee: BOOKING_FEE,
         remainingAmount: servicePrice - BOOKING_FEE,

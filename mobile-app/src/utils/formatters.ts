@@ -56,6 +56,7 @@ export function formatRating(rating: number): string {
 
 export function appointmentStatusLabel(status: AppointmentStatus): string {
   const labels: Record<AppointmentStatus, string> = {
+    aguardando_confirmacao: 'Aguardando Confirmação',
     pendente_pagamento: 'Aguardando Pagamento',
     confirmado: 'Confirmado',
     cancelado: 'Cancelado',
@@ -67,6 +68,7 @@ export function appointmentStatusLabel(status: AppointmentStatus): string {
 
 export function appointmentStatusColor(status: AppointmentStatus): string {
   const colors: Record<AppointmentStatus, string> = {
+    aguardando_confirmacao: '#9B6FC2',
     pendente_pagamento: '#D4A84B',
     confirmado: '#7DB87D',
     cancelado: '#D47070',

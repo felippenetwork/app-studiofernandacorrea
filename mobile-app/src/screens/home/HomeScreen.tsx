@@ -104,7 +104,7 @@ const { isLoading: feedLoading, refetch: refetchFeed, isRefetching } = useQuery(
   };
 
   const nextAppointment = appointments.find(
-    (a) => a.status === 'confirmado' || a.status === 'pendente_pagamento'
+    (a) => a.status === 'aguardando_confirmacao' || a.status === 'confirmado' || a.status === 'pendente_pagamento'
   );
   const firstName = user?.name?.split(' ')[0] ?? 'Bem-vinda';
 
@@ -136,7 +136,7 @@ const { isLoading: feedLoading, refetch: refetchFeed, isRefetching } = useQuery(
                 <Text style={styles.nextApptService}>{nextAppointment.service.name}</Text>
                 <Badge
                   label={appointmentStatusLabel(nextAppointment.status)}
-                  variant={nextAppointment.status === 'confirmado' ? 'success' : 'warning'}
+                  variant={nextAppointment.status === 'confirmado' ? 'success' : nextAppointment.status === 'aguardando_confirmacao' ? 'warning' : 'warning'}
                 />
               </View>
               <View style={styles.nextApptRow}>

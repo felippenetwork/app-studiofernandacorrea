@@ -63,6 +63,7 @@ export interface Professional {
 // ─── Appointments ────────────────────────────────────────────────────────────
 
 export type AppointmentStatus =
+  | 'aguardando_confirmacao'
   | 'pendente_pagamento'
   | 'confirmado'
   | 'cancelado'

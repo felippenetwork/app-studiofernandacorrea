@@ -21,7 +21,8 @@ export function AppointmentCard({ appointment, onPress }: AppointmentCardProps) 
   const statusLabel = appointmentStatusLabel(appointment.status);
 
   const badgeVariant =
-    appointment.status === 'confirmado' ? 'success'
+    appointment.status === 'aguardando_confirmacao' ? 'warning'
+    : appointment.status === 'confirmado' ? 'success'
     : appointment.status === 'pendente_pagamento' ? 'warning'
     : appointment.status === 'cancelado' ? 'error'
     : appointment.status === 'concluido' ? 'primary'

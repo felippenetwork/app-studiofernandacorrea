@@ -1,9 +1,10 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronLeft, ChevronRight, X, Loader2,
   Trash2, Plus, Settings, Search,
+  Eye, RefreshCw, History, Copy, FileText, Check,
 } from 'lucide-react';
 import {
   schedulesApi, professionalsApi, servicesApi,
@@ -22,11 +23,12 @@ const TOTAL_H = (END_HOUR - START_HOUR) * HOUR_HEIGHT;
 const DAY_NAMES_FULL = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
 const STATUS: Record<string, { label: string; bg: string; border: string; text: string; badge: string; dot: string }> = {
-  confirmado:         { label: 'Confirmado',       bg: 'bg-emerald-50',  border: 'border-l-emerald-500', text: 'text-emerald-900', badge: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
-  pendente_pagamento: { label: 'Pend. Pagamento',  bg: 'bg-amber-50',    border: 'border-l-amber-400',   text: 'text-amber-900',   badge: 'bg-amber-100 text-amber-700',    dot: 'bg-amber-400' },
-  cancelado:          { label: 'Cancelado',         bg: 'bg-red-50',      border: 'border-l-red-400',     text: 'text-red-900',     badge: 'bg-red-100 text-red-700',        dot: 'bg-red-400' },
-  concluido:          { label: 'Concluído',         bg: 'bg-sky-50',      border: 'border-l-sky-400',     text: 'text-sky-900',     badge: 'bg-sky-100 text-sky-700',        dot: 'bg-sky-400' },
-  nao_compareceu:     { label: 'Não compareceu',    bg: 'bg-gray-100',    border: 'border-l-gray-400',    text: 'text-gray-500',    badge: 'bg-gray-100 text-gray-600',      dot: 'bg-gray-400' },
+  aguardando_confirmacao: { label: 'Aguard. Confirmação', bg: 'bg-purple-50',  border: 'border-l-purple-400', text: 'text-purple-900', badge: 'bg-purple-100 text-purple-700', dot: 'bg-purple-400' },
+  confirmado:             { label: 'Confirmado',          bg: 'bg-emerald-50', border: 'border-l-emerald-500', text: 'text-emerald-900', badge: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
+  pendente_pagamento:     { label: 'Pend. Pagamento',     bg: 'bg-amber-50',   border: 'border-l-amber-400',   text: 'text-amber-900',   badge: 'bg-amber-100 text-amber-700',    dot: 'bg-amber-400' },
+  cancelado:              { label: 'Cancelado',            bg: 'bg-red-50',     border: 'border-l-red-400',     text: 'text-red-900',     badge: 'bg-red-100 text-red-700',        dot: 'bg-red-400' },
+  concluido:              { label: 'Concluído',            bg: 'bg-sky-50',     border: 'border-l-sky-400',     text: 'text-sky-900',     badge: 'bg-sky-100 text-sky-700',        dot: 'bg-sky-400' },
+  nao_compareceu:         { label: 'Não compareceu',       bg: 'bg-gray-100',   border: 'border-l-gray-400',    text: 'text-gray-500',    badge: 'bg-gray-100 text-gray-600',      dot: 'bg-gray-400' },
 };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -246,7 +248,7 @@ function AppointmentDetailModal({
           <div className="border-t pt-4">
             <p className="text-xs text-gray-400 mb-2 font-medium uppercase tracking-wide">Atualizar status</p>
             <div className="grid grid-cols-2 gap-2">
-              {(['confirmado', 'concluido', 'cancelado', 'nao_compareceu'] as const).map((st) => {
+              {(['aguardando_confirmacao', 'confirmado', 'concluido', 'cancelado', 'nao_compareceu'] as const).map((st) => {
                 const isActive = appt.status === st;
                 return (
                   <button key={st} disabled={isActive || statusMutation.isPending}
@@ -272,9 +274,155 @@ function AppointmentDetailModal({
   );
 }
 
+// ─── Agenda Context Menu ───────────────────────────────────────────────────────
+interface AgendaCtxMenu { x: number; y: number; appt: any; service?: Service; professional?: Professional }
+
+function AgendaContextMenu({
+  menu, onClose, onView, onChangeStatus, onHistory, onCopy,
+}: {
+  menu: AgendaCtxMenu;
+  onClose: () => void;
+  onView: (a: any, s?: Service, p?: Professional) => void;
+  onChangeStatus: (id: string, status: string) => void;
+  onHistory: (appt: any) => void;
+  onCopy: (appt: any, service?: Service) => void;
+}) {
+  const [statusOpen, setStatusOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    function handleKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    document.addEventListener('mousedown', handle);
+    document.addEventListener('keydown', handleKey);
+    return () => { document.removeEventListener('mousedown', handle); document.removeEventListener('keydown', handleKey); };
+  }, [onClose]);
+
+  const menuWidth = 210;
+  const menuHeight = 280;
+  const x = menu.x + menuWidth > window.innerWidth ? menu.x - menuWidth : menu.x;
+  const y = menu.y + menuHeight > window.innerHeight ? menu.y - menuHeight : menu.y;
+
+  const statusOptions = Object.entries(STATUS).filter(([k]) => k !== menu.appt.status);
+
+  return (
+    <div ref={ref} style={{ top: y, left: x, position: 'fixed', zIndex: 9999 }}
+      className="bg-white border border-gray-200 rounded-lg shadow-xl py-1 min-w-[210px] text-sm select-none">
+
+      <button className="w-full flex items-center gap-2.5 px-4 py-2 hover:bg-gray-50 text-gray-700"
+        onClick={() => { onView(menu.appt, menu.service, menu.professional); onClose(); }}>
+        <Eye className="w-4 h-4 text-gray-400" /> Visualizar
+      </button>
+
+      <div className="relative">
+        <button className="w-full flex items-center justify-between gap-2.5 px-4 py-2 hover:bg-gray-50 text-gray-700"
+          onClick={() => setStatusOpen((v) => !v)}>
+          <span className="flex items-center gap-2.5">
+            <RefreshCw className="w-4 h-4 text-gray-400" /> Alterar Status
+          </span>
+          <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+        </button>
+        {statusOpen && (
+          <div className="absolute left-full top-0 bg-white border border-gray-200 rounded-lg shadow-xl py-1 min-w-[180px]">
+            {statusOptions.map(([key, val]) => (
+              <button key={key} className="w-full flex items-center gap-2.5 px-4 py-2 hover:bg-gray-50 text-gray-700"
+                onClick={() => { onChangeStatus(menu.appt.id, key); onClose(); }}>
+                <span className={`w-2 h-2 rounded-full ${val.dot}`} />
+                {val.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-gray-100 my-1" />
+
+      <button className="w-full flex items-center gap-2.5 px-4 py-2 hover:bg-gray-50 text-gray-700"
+        onClick={() => { onHistory(menu.appt); onClose(); }}>
+        <History className="w-4 h-4 text-gray-400" /> Histórico do Cliente
+      </button>
+
+      <button className="w-full flex items-center gap-2.5 px-4 py-2 hover:bg-gray-50 text-gray-700"
+        onClick={() => { onCopy(menu.appt, menu.service); onClose(); }}>
+        <Copy className="w-4 h-4 text-gray-400" /> Copiar informações
+      </button>
+
+      <div className="border-t border-gray-100 my-1" />
+
+      <button className="w-full flex items-center gap-2.5 px-4 py-2 hover:bg-gray-50 text-gray-700"
+        onClick={() => {
+          const date = String(menu.appt.appointment_date ?? '').slice(0, 7);
+          window.open(`/faturamento?from=${date}-01&to=${date}-31`, '_blank');
+          onClose();
+        }}>
+        <FileText className="w-4 h-4 text-gray-400" /> Ver Faturamento do Mês
+      </button>
+    </div>
+  );
+}
+
+// ─── History Modal (Agenda) ────────────────────────────────────────────────────
+function AgendaHistoryModal({ appt, onClose }: { appt: any; onClose: () => void }) {
+  const userId = appt.user_id ?? appt.userId ?? '';
+  const { data, isLoading } = useQuery({
+    queryKey: ['agenda-history', userId],
+    queryFn: () => appointmentsAdminApi.listByUser(userId),
+    enabled: !!userId,
+  });
+  const items: any[] = (data as any)?.items ?? [];
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b">
+          <div>
+            <h2 className="font-semibold text-gray-900">Histórico de Agendamentos</h2>
+            <p className="text-xs text-gray-500">{appt.user?.name}</p>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-500" /></button>
+        </div>
+        <div className="overflow-y-auto flex-1 px-5 py-4">
+          {isLoading ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-[#C9A4A0]" /></div>
+          ) : items.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">Nenhum agendamento encontrado.</p>
+          ) : (
+            <div className="space-y-2">
+              {items.map((a: any) => {
+                const s = STATUS[a.status] ?? STATUS.confirmado;
+                return (
+                  <div key={a.id} className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0">
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">
+                        {String(a.appointment_date ?? '').slice(0, 10)} às {String(a.appointment_time ?? '').slice(0, 5)}
+                      </p>
+                      <p className="text-xs text-gray-500">{a.service?.name ?? '—'}</p>
+                    </div>
+                    <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium', s.badge)}>
+                      {s.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div className="px-5 pb-5 border-t border-gray-100 pt-4">
+          <button onClick={onClose} className="w-full py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Appointment Block (time-grid positioned) ──────────────────────────────────
-function AppointmentBlock({ appt, service, onClick }: {
+function AppointmentBlock({ appt, service, onClick, onContextMenu }: {
   appt: any; service?: Service; onClick: () => void;
+  onContextMenu: (e: React.MouseEvent) => void;
 }) {
   const startTime = String(appt.appointment_time ?? '').slice(0, 5);
   const durationMin = service?.durationMinutes ?? 60;
@@ -287,10 +435,11 @@ function AppointmentBlock({ appt, service, onClick }: {
   return (
     <button
       onClick={onClick}
+      onContextMenu={onContextMenu}
       title={`${appt.user?.name} — ${startTime}`}
       className={cn(
         'absolute left-1 right-1 rounded-lg border-l-[3px] border border-gray-200/50 px-2 py-1 text-left overflow-hidden',
-        'hover:brightness-95 transition-all shadow-sm',
+        'hover:brightness-95 transition-all shadow-sm cursor-context-menu',
         s.bg, s.border, s.text,
       )}
       style={{ top, height, zIndex: 10 }}
@@ -335,7 +484,7 @@ function NewAppointmentModal({
   const [priceOverride,   setPriceOverride]   = useState('');
   const [durOverride,     setDurOverride]     = useState('');
   const [notes,           setNotes]           = useState('');
-  const [status,          setStatus]          = useState<'confirmado' | 'pendente_pagamento'>('confirmado');
+  const [status,          setStatus]          = useState<'aguardando_confirmacao' | 'confirmado' | 'pendente_pagamento'>('aguardando_confirmacao');
 
   // Customer search
   const { data: customerResults = [] } = useQuery({
@@ -554,7 +703,11 @@ function NewAppointmentModal({
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1 block">Status</label>
             <div className="flex gap-2">
-              {(['confirmado', 'pendente_pagamento'] as const).map((s) => (
+              {([
+                ['aguardando_confirmacao', 'Aguard. Confirmação'],
+                ['confirmado',            'Confirmado'],
+                ['pendente_pagamento',    'Pend. Pagamento'],
+              ] as const).map(([s, label]) => (
                 <button key={s} type="button" onClick={() => setStatus(s)}
                   className={cn(
                     'flex-1 py-1.5 rounded-xl text-xs font-medium border transition-colors',
@@ -562,7 +715,7 @@ function NewAppointmentModal({
                       ? 'bg-[#C9A4A0] text-white border-[#C9A4A0]'
                       : 'border-gray-200 text-gray-600 hover:bg-gray-50',
                   )}>
-                  {s === 'confirmado' ? 'Confirmado' : 'Pend. Pagamento'}
+                  {label}
                 </button>
               ))}
             </div>
@@ -689,6 +842,9 @@ export default function AgendaPage() {
   const [detailAppt,    setDetailAppt]    = useState<any | null>(null);
   const [deletingBlock, setDeletingBlock] = useState<string | null>(null);
   const [showNewAppt,   setShowNewAppt]   = useState(false);
+  const [ctxMenu,       setCtxMenu]       = useState<AgendaCtxMenu | null>(null);
+  const [historyAppt,   setHistoryAppt]   = useState<any | null>(null);
+  const [copied,        setCopied]        = useState(false);
   const qc = useQueryClient();
 
   const isToday = selectedDate === todayStr();
@@ -740,6 +896,27 @@ export default function AgendaPage() {
     mutationFn: (id: string) => schedulesApi.deleteBlock(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['blocks'] }); setDeletingBlock(null); },
   });
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      appointmentStatusApi.updateStatus(id, status),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['agenda-appointments'] }),
+  });
+
+  const handleCopy = useCallback((appt: any, service?: Service) => {
+    const time = String(appt.appointment_time ?? '').slice(0, 5);
+    const text = [
+      `Cliente: ${appt.user?.name ?? '—'}`,
+      `Serviço: ${service?.name ?? '—'}`,
+      `Data: ${appt.appointment_date} às ${time}`,
+      `Valor: R$ ${Number(appt.service_price ?? 0).toFixed(2)}`,
+      `Status: ${STATUS[appt.status]?.label ?? appt.status}`,
+    ].join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, []);
 
   // ── Render helpers ─────────────────────────────────────────────────────────
   const clientFilter = searchClient.trim().toLowerCase();
@@ -997,6 +1174,10 @@ export default function AgendaPage() {
                         appt={appt}
                         service={getService(appt.service_id)}
                         onClick={() => setDetailAppt(appt)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setCtxMenu({ x: e.clientX, y: e.clientY, appt, service: getService(appt.service_id), professional: getProfessional(appt.professional_id) });
+                        }}
                       />
                     ))}
 
@@ -1053,6 +1234,25 @@ export default function AgendaPage() {
           professional={detailPro}
           onClose={() => setDetailAppt(null)}
         />
+      )}
+      {historyAppt && (
+        <AgendaHistoryModal appt={historyAppt} onClose={() => setHistoryAppt(null)} />
+      )}
+      {ctxMenu && (
+        <AgendaContextMenu
+          menu={ctxMenu}
+          onClose={() => setCtxMenu(null)}
+          onView={(a, s, p) => { setDetailAppt(a); }}
+          onChangeStatus={(id, status) => statusMutation.mutate({ id, status })}
+          onHistory={setHistoryAppt}
+          onCopy={handleCopy}
+        />
+      )}
+      {copied && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-gray-900 text-white text-sm px-4 py-2.5 rounded-lg shadow-lg">
+          <Check className="w-4 h-4 text-green-400" />
+          Informações copiadas!
+        </div>
       )}
     </div>
   );
