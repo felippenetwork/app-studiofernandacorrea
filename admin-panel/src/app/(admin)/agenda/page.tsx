@@ -22,13 +22,13 @@ const TOTAL_H = (END_HOUR - START_HOUR) * HOUR_HEIGHT;
 
 const DAY_NAMES_FULL = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
-const STATUS: Record<string, { label: string; bg: string; border: string; text: string; badge: string; dot: string }> = {
-  aguardando_confirmacao: { label: 'Aguard. Confirmação', bg: 'bg-purple-50',  border: 'border-l-purple-400', text: 'text-purple-900', badge: 'bg-purple-100 text-purple-700', dot: 'bg-purple-400' },
-  confirmado:             { label: 'Confirmado',          bg: 'bg-emerald-50', border: 'border-l-emerald-500', text: 'text-emerald-900', badge: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
-  pendente_pagamento:     { label: 'Pend. Pagamento',     bg: 'bg-amber-50',   border: 'border-l-amber-400',   text: 'text-amber-900',   badge: 'bg-amber-100 text-amber-700',    dot: 'bg-amber-400' },
-  cancelado:              { label: 'Cancelado',            bg: 'bg-red-50',     border: 'border-l-red-400',     text: 'text-red-900',     badge: 'bg-red-100 text-red-700',        dot: 'bg-red-400' },
-  concluido:              { label: 'Concluído',            bg: 'bg-sky-50',     border: 'border-l-sky-400',     text: 'text-sky-900',     badge: 'bg-sky-100 text-sky-700',        dot: 'bg-sky-400' },
-  nao_compareceu:         { label: 'Não compareceu',       bg: 'bg-gray-100',   border: 'border-l-gray-400',    text: 'text-gray-500',    badge: 'bg-gray-100 text-gray-600',      dot: 'bg-gray-400' },
+const STATUS: Record<string, { label: string; bg: string; border: string; text: string; badge: string; dot: string; block: string }> = {
+  aguardando_confirmacao: { label: 'Aguard. Confirmação', bg: 'bg-purple-50',  border: 'border-l-purple-400', text: 'text-purple-900', badge: 'bg-purple-100 text-purple-700', dot: 'bg-purple-400',  block: 'bg-violet-400 border-violet-500' },
+  confirmado:             { label: 'Confirmado',          bg: 'bg-emerald-50', border: 'border-l-emerald-500', text: 'text-emerald-900', badge: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500', block: 'bg-sky-400 border-sky-500' },
+  pendente_pagamento:     { label: 'Pend. Pagamento',     bg: 'bg-amber-50',   border: 'border-l-amber-400',   text: 'text-amber-900',   badge: 'bg-amber-100 text-amber-700',    dot: 'bg-amber-400',   block: 'bg-amber-400 border-amber-500' },
+  cancelado:              { label: 'Cancelado',            bg: 'bg-red-50',     border: 'border-l-red-400',     text: 'text-red-900',     badge: 'bg-red-100 text-red-700',        dot: 'bg-red-400',     block: 'bg-red-400 border-red-500' },
+  concluido:              { label: 'Concluído',            bg: 'bg-sky-50',     border: 'border-l-sky-400',     text: 'text-sky-900',     badge: 'bg-sky-100 text-sky-700',        dot: 'bg-sky-400',     block: 'bg-blue-500 border-blue-600' },
+  nao_compareceu:         { label: 'Não compareceu',       bg: 'bg-gray-100',   border: 'border-l-gray-400',    text: 'text-gray-500',    badge: 'bg-gray-100 text-gray-600',      dot: 'bg-gray-400',    block: 'bg-slate-400 border-slate-500' },
 };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -430,7 +430,7 @@ function AppointmentBlock({ appt, service, onClick, onContextMenu }: {
   const s = STATUS[appt.status] ?? STATUS.confirmado;
   const top = topPx(startTime);
   const height = heightPx(durationMin);
-  const isShort = height < 50;
+  const isShort = height < 48;
 
   return (
     <button
@@ -438,24 +438,33 @@ function AppointmentBlock({ appt, service, onClick, onContextMenu }: {
       onContextMenu={onContextMenu}
       title={`${appt.user?.name} — ${startTime}`}
       className={cn(
-        'absolute left-1 right-1 rounded-lg border-l-[3px] border border-gray-200/50 px-2 py-1 text-left overflow-hidden',
-        'hover:brightness-95 transition-all shadow-sm cursor-context-menu',
-        s.bg, s.border, s.text,
+        'absolute left-0 right-0 rounded-md border text-left overflow-hidden',
+        'hover:brightness-90 active:brightness-75 transition-all shadow-md cursor-context-menu',
+        s.block,
       )}
       style={{ top, height, zIndex: 10 }}
     >
-      <p className={cn('font-semibold leading-tight truncate', isShort ? 'text-[10px]' : 'text-xs')}>
-        {appt.user?.name ?? 'Cliente'}
-      </p>
-      {!isShort && (
-        <>
-          <p className="text-[10px] opacity-70">{startTime} – {endTime}</p>
-          <p className="text-[10px] opacity-60 truncate">{service?.name}</p>
-        </>
-      )}
-      {isShort && (
-        <p className="text-[10px] opacity-70 truncate">{startTime} · {service?.name}</p>
-      )}
+      {/* Status icon bubble */}
+      <div className="absolute top-1 left-1.5 w-4 h-4 rounded-full bg-white/25 ring-1 ring-white/40 flex items-center justify-center flex-shrink-0">
+        <div className="w-1.5 h-1.5 rounded-full bg-white" />
+      </div>
+
+      <div className="pl-7 pr-2 py-1 h-full flex flex-col justify-center">
+        <p className={cn('font-semibold leading-tight truncate text-white', isShort ? 'text-[10px]' : 'text-xs')}>
+          {appt.user?.name ?? 'Cliente'}
+        </p>
+        {!isShort && (
+          <>
+            <p className="text-[10px] text-white/80 leading-tight">{startTime} – {endTime}</p>
+            {height >= 72 && (
+              <p className="text-[10px] text-white/70 truncate leading-tight">{service?.name}</p>
+            )}
+          </>
+        )}
+        {isShort && (
+          <p className="text-[10px] text-white/80 truncate">{startTime} · {service?.name}</p>
+        )}
+      </div>
     </button>
   );
 }
@@ -1059,7 +1068,7 @@ export default function AgendaPage() {
         </div>
 
         {/* ── Time grid ─────────────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-auto bg-gray-50">
+        <div className="flex-1 overflow-auto bg-blue-50">
           <div className="inline-flex min-w-full">
 
           {/* Time labels column (sticky left) */}
@@ -1083,7 +1092,7 @@ export default function AgendaPage() {
             const proBlocks = getProBlocks(pro.id);
 
             return (
-              <div key={pro.id} className="flex-shrink-0 w-[200px] border-r border-gray-100 last:border-r-0">
+              <div key={pro.id} className="flex-shrink-0 w-[200px] border-r border-blue-200/60 last:border-r-0">
 
                 {/* Column header */}
                 <div className="h-[72px] bg-white border-b border-gray-100 px-3 flex flex-col items-center justify-center gap-1 sticky top-0 z-10">
@@ -1112,16 +1121,16 @@ export default function AgendaPage() {
                 </div>
 
                 {/* Time slot area */}
-                <div className="relative bg-white" style={{ height: TOTAL_H }}>
+                <div className="relative bg-blue-50" style={{ height: TOTAL_H }}>
                   {/* Hour grid lines */}
                   {HOURS.map((_, i) => (
-                    <div key={i} className="absolute left-0 right-0 border-b border-gray-100"
+                    <div key={i} className="absolute left-0 right-0 border-b border-blue-200/60"
                       style={{ top: i * HOUR_HEIGHT, height: HOUR_HEIGHT }} />
                   ))}
 
                   {/* Half-hour dotted lines */}
                   {HOURS.map((_, i) => (
-                    <div key={`h${i}`} className="absolute left-0 right-0 border-b border-dashed border-gray-50"
+                    <div key={`h${i}`} className="absolute left-0 right-0 border-b border-dashed border-blue-100"
                       style={{ top: i * HOUR_HEIGHT + HOUR_HEIGHT / 2 }} />
                   ))}
 
