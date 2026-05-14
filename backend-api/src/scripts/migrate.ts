@@ -215,6 +215,9 @@ const MIGRATIONS: Migration[] = [
         ('retencao_60', 'Retenção — 60 dias',
          'Oi {{nome}}! 🌸 Já faz {{dias}} dias que não te vemos. Estamos com novidades por aqui! Agende seu horário e volte a se cuidar.',
          60),
+        ('retencao_15', 'Retenção — 15 dias',
+         'Olá, {{nome}}! 💅 Está chegando a hora de renovar o seu {{servico}}. Que tal já garantir o seu horário? Estamos te esperando! 🌸',
+         15),
         ('pos_atendimento', 'Avaliação pós-atendimento',
          'Olá {{nome}}! Esperamos que tenha amado seu atendimento! ⭐ Conta pra gente como foi e deixe sua avaliação no app. 💬',
          0)

@@ -15,7 +15,7 @@ import cron from 'node-cron';
 import { birthdayService } from './modules/birthday/birthday.service';
 import { trinksSync } from './modules/trinks/trinks.sync';
 import { pushService } from './services/push.service';
-import { runLembrete24h, runPosAtendimento, runRetencaoWhatsApp } from './modules/whatsapp/whatsapp.service';
+import { runLembrete24h, runPosAtendimento, runRetencaoWhatsApp, runRetencao15 } from './modules/whatsapp/whatsapp.service';
 import { supabase } from './config/supabase';
 import { hasSupabase } from './config/env';
 
@@ -136,13 +136,20 @@ export function startCronJobs(): void {
       } catch (err) {
         console.error('[cron] Retenção WhatsApp error:', (err as Error).message);
       }
+
+      try {
+        const result = await runRetencao15();
+        console.log(`[cron] Retenção 15d: ${result.sent} enviados, ${result.skipped} ignorados.`);
+      } catch (err) {
+        console.error('[cron] Retenção 15d error:', (err as Error).message);
+      }
     },
     { timezone: 'America/Sao_Paulo' }
   );
 
   console.log('   Cron jobs   : ✓ birthday @ 08:00 BRT');
   console.log('                 ✓ lembrete 24h @ 09:00 BRT');
-  console.log('                 ✓ retencao wpp @ 10:00 BRT');
+  console.log('                 ✓ retencao wpp (15/30/60/90d) @ 10:00 BRT');
   console.log('                 ✓ trinks sync every 6 h');
   console.log('                 ✓ review push every 30 min');
 }

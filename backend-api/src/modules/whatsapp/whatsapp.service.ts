@@ -309,6 +309,80 @@ export async function runRetencaoWhatsApp(): Promise<{ sent30: number; sent60: n
   return { sent30, sent60, skipped };
 }
 
+// ─── Automação: retenção 15 dias (manutenção) ────────────────────────────────
+export async function runRetencao15(): Promise<{ sent: number; skipped: number }> {
+  if (!hasSupabase) return { sent: 0, skipped: 0 };
+
+  const { data: tmpl } = await supabase
+    .from('whatsapp_templates')
+    .select('message, is_active')
+    .eq('trigger', 'retencao_15')
+    .maybeSingle();
+
+  if (!tmpl?.is_active) return { sent: 0, skipped: 0 };
+
+  // Busca todos os agendamentos concluídos com nome do serviço e dados do cliente
+  const { data: appts } = await supabase
+    .from('appointments')
+    .select('user_id, appointment_date, service:services(name), client:users(id, name, phone)')
+    .eq('status', 'concluido')
+    .order('appointment_date', { ascending: false });
+
+  if (!appts?.length) return { sent: 0, skipped: 0 };
+
+  // Agrupa por usuário — mantém apenas o último agendamento de cada um
+  const byUser = new Map<string, { user: any; lastDate: string; serviceName: string }>();
+  for (const a of appts as any[]) {
+    if (!byUser.has(a.user_id)) {
+      byUser.set(a.user_id, {
+        user:        a.client,
+        lastDate:    a.appointment_date,
+        serviceName: (a.service as any)?.name ?? '',
+      });
+    }
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  type Candidate = { userId: string; name: string; phone: string; serviceName: string };
+  const candidates: Candidate[] = [];
+
+  for (const { user, lastDate, serviceName } of byUser.values()) {
+    if (!user?.phone) continue;
+    const last = new Date(lastDate + 'T00:00:00');
+    const daysAgo = Math.floor((today.getTime() - last.getTime()) / 86_400_000);
+    if (daysAgo >= 14 && daysAgo <= 16) {
+      candidates.push({ userId: user.id, name: user.name ?? '', phone: user.phone, serviceName });
+    }
+  }
+
+  if (!candidates.length) return { sent: 0, skipped: 0 };
+
+  // Anti-duplicata: não reenvia nos últimos 10 dias
+  const cutoff = new Date(today.getTime() - 10 * 86_400_000).toISOString();
+  const { data: recentLogs } = await supabase
+    .from('whatsapp_message_log')
+    .select('recipient_id')
+    .eq('trigger', 'retencao_15')
+    .in('recipient_id', candidates.map((c) => c.userId))
+    .gte('sent_at', cutoff);
+
+  const alreadySent = new Set((recentLogs ?? []).map((l: any) => l.recipient_id));
+
+  let sent = 0;
+  let skipped = 0;
+
+  for (const c of candidates) {
+    if (alreadySent.has(c.userId)) { skipped++; continue; }
+    const message = interpolate(tmpl.message, { nome: c.name, servico: c.serviceName });
+    const result = await sendMessage(c.phone, message, 'retencao_15', c.userId, c.name);
+    if (result.ok) sent++; else skipped++;
+  }
+
+  return { sent, skipped };
+}
+
 // ─── Automação: pós-atendimento (2h após concluído) ───────────────────────────
 export async function runPosAtendimento(): Promise<{ sent: number; skipped: number }> {
   if (!hasSupabase) return { sent: 0, skipped: 0 };
