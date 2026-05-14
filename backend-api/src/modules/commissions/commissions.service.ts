@@ -66,6 +66,10 @@ export const commissionsService = {
     return commissionsRepository.getSummary(from ?? monthStart, to ?? today);
   },
 
+  async getReport(professionalId: string, from: string, to: string) {
+    return commissionsRepository.findReportRecords(professionalId, from, to);
+  },
+
   async markAsPaid(ids: string[], adminId: string, notes?: string) {
     if (!ids.length) throw new Error('Nenhuma comissão selecionada.');
     return commissionsRepository.markAsPaid(ids, adminId, notes);

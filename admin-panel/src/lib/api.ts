@@ -243,6 +243,8 @@ export const commissionsApi = {
     apiClient.get('/admin/commissions/records', { params }).then((r) => r.data.data),
   pay: (ids: string[], notes?: string) =>
     apiClient.post('/admin/commissions/records/pay', { ids, notes }).then((r) => r.data),
+  getReport: (params: { professionalId: string; from: string; to: string }) =>
+    apiClient.get('/admin/commissions/report', { params }).then((r) => r.data.data as any[]),
 };
 
 // ─── WhatsApp ─────────────────────────────────────────────────────────────────

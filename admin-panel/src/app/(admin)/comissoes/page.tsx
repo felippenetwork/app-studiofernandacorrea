@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { DollarSign, Percent, CheckCircle2, Loader2, X, ChevronDown } from 'lucide-react';
+import { DollarSign, Percent, CheckCircle2, Loader2, X, ChevronDown, FileText, Printer } from 'lucide-react';
 import { commissionsApi, professionalsApi, servicesApi } from '@/lib/api';
 import { Professional, Service, CommissionRate, CommissionRecord, CommissionSummary } from '@/types';
 import { cn, getErrorMessage } from '@/lib/utils';
@@ -376,9 +376,240 @@ function RecordsTab() {
   );
 }
 
+// ─── Relatório Tab ─────────────────────────────────────────────────────────────
+
+function RelatorioTab() {
+  const today = new Date().toISOString().slice(0, 10);
+  const monthStart = today.slice(0, 7) + '-01';
+
+  const [filterPro,  setFilterPro]  = useState('');
+  const [filterFrom, setFilterFrom] = useState(monthStart);
+  const [filterTo,   setFilterTo]   = useState(today);
+  const [fetched,    setFetched]    = useState(false);
+
+  const { data: professionals = [] } = useQuery<Professional[]>({
+    queryKey: ['professionals'],
+    queryFn: () => professionalsApi.list(),
+    staleTime: 5 * 60_000,
+  });
+
+  const { data: items = [], isLoading, refetch } = useQuery<any[]>({
+    queryKey: ['commission-report', filterPro, filterFrom, filterTo],
+    queryFn: () => commissionsApi.getReport({ professionalId: filterPro, from: filterFrom, to: filterTo }),
+    enabled: false,
+    staleTime: 30_000,
+  });
+
+  const selectedPro = professionals.find((p) => p.id === filterPro);
+  const total = items.reduce((s, r) => s + Number(r.commission_amount), 0);
+
+  function fmtDate(d: string) {
+    const [y, m, day] = d.split('-');
+    return `${day}/${m}/${y}`;
+  }
+
+  function methodLabel(method?: string | null) {
+    if (!method) return '—';
+    const map: Record<string, string> = {
+      pix: 'PIX',
+      credit_card: 'Crédito',
+      debit_card: 'Débito',
+      cash: 'Dinheiro',
+    };
+    return map[method] ?? method;
+  }
+
+  const handleGenerate = async () => {
+    if (!filterPro) return;
+    setFetched(true);
+    refetch();
+  };
+
+  const handlePrint = () => {
+    if (!selectedPro || !items.length) return;
+    const fromLabel = fmtDate(filterFrom);
+    const toLabel   = fmtDate(filterTo);
+
+    const rows = items.map((item: any) => {
+      const apptDate = item.appointment?.appointment_date ?? '';
+      const dateStr  = apptDate ? fmtDate(apptDate) : '—';
+      const client   = item.appointment?.client_name ?? '—';
+      const method   = methodLabel(item.appointment?.payment_method);
+      return `
+        <tr>
+          <td style="text-align:center">${dateStr}</td>
+          <td style="text-align:center">${dateStr}</td>
+          <td style="text-align:center">${dateStr}</td>
+          <td>${client}</td>
+          <td>${item.service?.name ?? '—'}</td>
+          <td style="text-align:right">${Number(item.service_price).toFixed(2)}</td>
+          <td style="text-align:center">${method}</td>
+          <td style="text-align:right">${Number(item.commission_amount).toFixed(2)}</td>
+        </tr>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+      <title>Relatório – ${selectedPro.name}</title>
+      <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:Arial,sans-serif;font-size:11px;color:#111;padding:24px 30px}
+        .hdr{text-align:center;margin-bottom:22px}
+        .hdr .studio{font-size:13px;font-weight:bold}
+        .hdr .title{font-size:17px;font-weight:bold;margin-top:14px}
+        .hdr .name{font-size:14px;font-weight:bold}
+        .hdr .period{font-size:11px;margin-top:4px}
+        .sec{font-size:12px;font-weight:bold;text-transform:uppercase;margin:18px 0 5px}
+        .sub{font-style:italic;margin-bottom:8px;font-size:11px}
+        table{width:100%;border-collapse:collapse}
+        th{background:#f3f4f6;font-weight:600;text-align:center;border:1px solid #999;padding:6px 8px;font-size:10px}
+        td{border:1px solid #ccc;padding:5px 8px;font-size:10px;vertical-align:middle}
+        tfoot td{font-weight:bold;background:#f9fafb}
+        @page{margin:12mm 10mm}
+      </style></head><body>
+      <div class="hdr">
+        <div class="studio">Studio Fernanda Corrêa Beauty</div>
+        <div class="title">RESUMO FINANCEIRO</div>
+        <div class="name">${selectedPro.name.toUpperCase()}</div>
+        <div class="period">Período de Pagamento: ${fromLabel} a ${toLabel}</div>
+      </div>
+      <div class="sec">Descritivo das Receitas Variáveis no Período</div>
+      <div class="sub">Sobre Serviços</div>
+      <table>
+        <thead><tr>
+          <th>Data do<br>Atendimento</th>
+          <th>Data do<br>Pagamento</th>
+          <th>Liberação do<br>Valor Profissional</th>
+          <th>Cliente</th>
+          <th>Serviço</th>
+          <th>Valor R$</th>
+          <th>Forma de<br>Pagamento</th>
+          <th>Valor<br>Profissional R$</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr>
+          <td colspan="7" style="text-align:right">Total</td>
+          <td style="text-align:right">${total.toFixed(2)}</td>
+        </tr></tfoot>
+      </table>
+      <script>window.onload=()=>window.print();</script>
+    </body></html>`;
+
+    const w = window.open('', '_blank', 'width=1000,height=760');
+    if (!w) return;
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Filter bar */}
+      <div className="flex flex-wrap gap-3 items-end bg-white border border-gray-100 rounded-xl p-4">
+        <div>
+          <label className="text-xs font-medium text-gray-500 mb-1 block">Profissional *</label>
+          <select value={filterPro} onChange={(e) => { setFilterPro(e.target.value); setFetched(false); }}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 min-w-[200px]">
+            <option value="">Selecione um profissional</option>
+            {professionals.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-500 mb-1 block">De</label>
+          <input type="date" value={filterFrom} onChange={(e) => { setFilterFrom(e.target.value); setFetched(false); }}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-500 mb-1 block">Até</label>
+          <input type="date" value={filterTo} onChange={(e) => { setFilterTo(e.target.value); setFetched(false); }}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700" />
+        </div>
+        <button onClick={handleGenerate} disabled={!filterPro || isLoading}
+          className="flex items-center gap-2 px-4 py-2 bg-[#C9A4A0] text-white text-sm font-semibold rounded-lg hover:bg-[#b8918d] disabled:opacity-50 transition-colors">
+          {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+          Gerar Relatório
+        </button>
+        {fetched && items.length > 0 && (
+          <button onClick={handlePrint}
+            className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
+            <Printer className="w-4 h-4" />
+            Imprimir / PDF
+          </button>
+        )}
+      </div>
+
+      {/* Empty state */}
+      {fetched && !isLoading && items.length === 0 && (
+        <div className="text-center py-16 text-gray-400">
+          <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">Nenhum registro de comissão encontrado para o período.</p>
+          <p className="text-xs mt-1 text-gray-300">Verifique se os agendamentos foram concluídos e têm comissão configurada.</p>
+        </div>
+      )}
+
+      {/* Preview table */}
+      {fetched && items.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+          {/* Report header preview */}
+          <div className="p-6 border-b border-gray-100 text-center bg-gray-50">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Studio Fernanda Corrêa Beauty</p>
+            <p className="text-lg font-bold text-gray-900 mt-2">RESUMO FINANCEIRO</p>
+            <p className="text-base font-bold text-gray-800">{selectedPro?.name?.toUpperCase()}</p>
+            <p className="text-sm text-gray-500 mt-1">
+              Período de Pagamento: {fmtDate(filterFrom)} a {fmtDate(filterTo)}
+            </p>
+          </div>
+
+          <div className="px-4 pt-4 pb-2">
+            <p className="text-xs font-bold text-gray-800 uppercase tracking-wide">Descritivo das Receitas Variáveis no Período</p>
+            <p className="text-xs italic text-gray-500 mt-2 mb-3">Sobre Serviços</p>
+          </div>
+
+          <div className="overflow-x-auto px-4 pb-6">
+            <table className="w-full text-xs border-collapse border border-gray-300">
+              <thead>
+                <tr className="bg-gray-100">
+                  {['Data do Atendimento','Data do Pagamento','Liberação do Valor Profissional','Cliente','Serviço','Valor R$','Forma de Pagamento','Valor Profissional R$'].map((h) => (
+                    <th key={h} className="border border-gray-300 px-3 py-2 text-center font-semibold text-gray-700 whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item: any) => {
+                  const apptDate = item.appointment?.appointment_date ?? '';
+                  const dateStr  = apptDate ? fmtDate(apptDate) : '—';
+                  const client   = item.appointment?.client_name ?? '—';
+                  const method   = methodLabel(item.appointment?.payment_method);
+                  return (
+                    <tr key={item.id} className="hover:bg-gray-50">
+                      <td className="border border-gray-200 px-3 py-2 text-center whitespace-nowrap">{dateStr}</td>
+                      <td className="border border-gray-200 px-3 py-2 text-center whitespace-nowrap">{dateStr}</td>
+                      <td className="border border-gray-200 px-3 py-2 text-center whitespace-nowrap">{dateStr}</td>
+                      <td className="border border-gray-200 px-3 py-2">{client}</td>
+                      <td className="border border-gray-200 px-3 py-2">{item.service?.name ?? '—'}</td>
+                      <td className="border border-gray-200 px-3 py-2 text-right whitespace-nowrap">{Number(item.service_price).toFixed(2)}</td>
+                      <td className="border border-gray-200 px-3 py-2 text-center">{method}</td>
+                      <td className="border border-gray-200 px-3 py-2 text-right font-semibold whitespace-nowrap">{Number(item.commission_amount).toFixed(2)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="bg-gray-50 font-bold">
+                  <td colSpan={7} className="border border-gray-300 px-3 py-2.5 text-right text-sm text-gray-900">Total</td>
+                  <td className="border border-gray-300 px-3 py-2.5 text-right text-sm text-gray-900">{total.toFixed(2)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
-type Tab = 'dashboard' | 'taxas' | 'registros';
+type Tab = 'dashboard' | 'taxas' | 'registros' | 'relatorio';
 
 export default function ComissoesPage() {
   const [tab, setTab] = useState<Tab>('dashboard');
@@ -386,9 +617,10 @@ export default function ComissoesPage() {
   const monthStart = today.slice(0, 7) + '-01';
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'taxas',     label: 'Configurar Taxas' },
-    { id: 'registros', label: 'Registros & Repasse' },
+    { id: 'dashboard',  label: 'Dashboard' },
+    { id: 'taxas',      label: 'Configurar Taxas' },
+    { id: 'registros',  label: 'Registros & Repasse' },
+    { id: 'relatorio',  label: 'Relatório de Fechamento' },
   ];
 
   return (
@@ -409,9 +641,10 @@ export default function ComissoesPage() {
         ))}
       </div>
 
-      {tab === 'dashboard' && <SummaryCards from={monthStart} to={today} />}
-      {tab === 'taxas'     && <RatesTab />}
-      {tab === 'registros' && <RecordsTab />}
+      {tab === 'dashboard'  && <SummaryCards from={monthStart} to={today} />}
+      {tab === 'taxas'      && <RatesTab />}
+      {tab === 'registros'  && <RecordsTab />}
+      {tab === 'relatorio'  && <RelatorioTab />}
     </div>
   );
 }

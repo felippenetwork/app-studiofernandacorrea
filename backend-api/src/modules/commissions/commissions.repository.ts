@@ -149,6 +149,65 @@ export const commissionsRepository = {
     if (error) throw new Error('Erro ao registrar repasse.');
   },
 
+  async findReportRecords(professionalId: string, from: string, to: string): Promise<any[]> {
+    if (!hasSupabase) return [];
+
+    // Step 1: appointment IDs for the professional in the date range
+    const { data: appts } = await supabase
+      .from('appointments')
+      .select('id, user_id')
+      .eq('professional_id', professionalId)
+      .gte('appointment_date', from)
+      .lte('appointment_date', to);
+
+    const apptIds = (appts ?? []).map((a: any) => a.id);
+    if (!apptIds.length) return [];
+
+    const userIdByAppt: Record<string, string> = {};
+    for (const a of (appts ?? []) as any[]) { userIdByAppt[a.id] = a.user_id; }
+
+    // Step 2: commission records with appointment and service
+    const { data: records, error } = await supabase
+      .from('commission_records')
+      .select('*, service:services(id,name), appointment:appointments(id,appointment_date,appointment_time)')
+      .eq('professional_id', professionalId)
+      .in('appointment_id', apptIds)
+      .order('appointment_id');
+
+    if (error) throw new Error('Erro ao gerar relatório.');
+    if (!records?.length) return [];
+
+    // Step 3: user names
+    const userIds = [...new Set(Object.values(userIdByAppt))].filter(Boolean);
+    const userNameById: Record<string, string> = {};
+    if (userIds.length) {
+      const { data: users } = await supabase.from('users').select('id,name').in('id', userIds);
+      for (const u of (users ?? []) as any[]) { userNameById[u.id] = u.name; }
+    }
+
+    // Step 4: payment methods
+    const paymentByAppt: Record<string, string> = {};
+    const { data: payments } = await supabase
+      .from('payments')
+      .select('appointment_id,method,status')
+      .in('appointment_id', apptIds);
+    for (const p of (payments ?? []) as any[]) {
+      if (!paymentByAppt[p.appointment_id] && p.method) {
+        paymentByAppt[p.appointment_id] = p.method;
+      }
+    }
+
+    // Merge
+    return (records as any[]).map((rec) => ({
+      ...rec,
+      appointment: {
+        ...rec.appointment,
+        client_name: userNameById[userIdByAppt[rec.appointment_id]] ?? '—',
+        payment_method: paymentByAppt[rec.appointment_id] ?? null,
+      },
+    }));
+  },
+
   async getSummary(from: string, to: string): Promise<any[]> {
     if (!hasSupabase) return [];
     const { data, error } = await supabase

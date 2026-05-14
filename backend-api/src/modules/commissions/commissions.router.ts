@@ -82,6 +82,20 @@ commissionsRouter.get('/records', async (req: Request, res: Response): Promise<v
   }
 });
 
+// GET /api/admin/commissions/report — relatório de fechamento por profissional
+commissionsRouter.get('/report', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { professionalId, from, to } = req.query as Record<string, string>;
+    if (!professionalId || !from || !to) {
+      res.status(400).json({ error: 'BadRequest', message: 'professionalId, from e to são obrigatórios.' });
+      return;
+    }
+    res.json({ data: await commissionsService.getReport(professionalId, from, to) });
+  } catch (err) {
+    res.status(500).json({ error: 'InternalError', message: (err as Error).message });
+  }
+});
+
 // POST /api/admin/commissions/records/pay — marcar repasse em lote
 const paySchema = z.object({
   ids:   z.array(z.string().uuid()).min(1),
